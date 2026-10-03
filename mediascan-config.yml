@@ -1,0 +1,16 @@
+mediaDirs: 
+    - /data/Music
+    - /data/MusicOther
+mediaExts:
+    - .mp3
+    - .m4a
+excludePaths:
+    - ExcludeThisArtistDir
+excludeTitle: []
+excludeArtist: []
+excludeAlbumArtist: []
+excludeAlbum: []
+excludeGenre: []
+sortBy: year
+groupBy: none
+getMp3Duration: false
