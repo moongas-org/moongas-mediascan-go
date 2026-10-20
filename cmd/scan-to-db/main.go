@@ -1,19 +1,22 @@
 package main
 
 // Unlike the yaml scanners, this one scans everything in one cmd,
-// i.e. both media files and artist.yml files,
+// i.e. media files, artist.yml files, and album.yml files,
 // and outputs a single sqlite database with multiple tables
-// (currently the tables are "mediafile" and "artist")
+// (currently the tables are "mediafile", "artist", and "album")
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	_ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -72,6 +75,9 @@ func main() {
 	defer sqliteDatabase.Close()
 	createTableMediaFile(sqliteDatabase)
 	createTableArtist(sqliteDatabase)
+	if err := createTableAlbum(sqliteDatabase); err != nil {
+		log.Fatal(err)
+	}
 
 	for i := 0; i < len(files); i++ {
 		mf := files[i]
@@ -83,9 +89,14 @@ func main() {
 		insertArtist(sqliteDatabase, a.Path, a.ArtistData.ArtistNames[0], a.ArtistData.City, a.ArtistData.CountryCode, a.ArtistData.RegionCode, a.ArtistData.LanguageCodes[0])
 	}
 
+	if err := insertAlbums(sqliteDatabase, files); err != nil {
+		log.Fatal(err)
+	}
+
 	// DISPLAY INSERTED RECORDS
 	displayMediaFiles(sqliteDatabase)
 	displayArtists(sqliteDatabase)
+	displayAlbums(sqliteDatabase)
 
 	log.Printf("Written to file %s", outputDBAbsFilepath)
 }
@@ -190,6 +201,56 @@ func insertArtist(db *sql.DB, path string, name string, city string, countrycode
 	}
 }
 
+func createTableAlbum(db *sql.DB) error {
+	log.Println("Create album table...")
+	_, err := db.Exec(`CREATE TABLE album (
+		"id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+		"path" TEXT UNIQUE,
+		"name" TEXT,
+		"year" INTEGER,
+		"explicitcover" BOOLEAN
+	  );`)
+	if err != nil {
+		return fmt.Errorf("create album table: %w", err)
+	}
+	log.Println("album table created")
+	return nil
+}
+
+func insertAlbums(db *sql.DB, files []shared.MediaFileData) error {
+	seen := make(map[string]bool)
+	for _, mf := range files {
+		if seen[mf.AlbumPath] {
+			continue
+		}
+
+		album := shared.AlbumData{
+			Name:         mf.Album,
+			DateReleased: shared.Date{Y: mf.Year},
+		}
+		path := filepath.Join(mf.AlbumPath, "album.yml")
+		data, err := os.ReadFile(path)
+		if err == nil {
+			var file shared.AlbumYamlFile
+			if err := yaml.Unmarshal(data, &file); err != nil {
+				return fmt.Errorf("parse %s: %w", path, err)
+			}
+			album = file.AlbumData
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+
+		log.Println("Inserting album record ...")
+		_, err = db.Exec(`INSERT INTO album(path, name, year, explicitcover) VALUES (?, ?, ?, ?)`,
+			mf.AlbumPath, album.Name, album.DateReleased.Y, album.ExplicitCover)
+		if err != nil {
+			return fmt.Errorf("insert album %s: %w", mf.AlbumPath, err)
+		}
+		seen[mf.AlbumPath] = true
+	}
+	return nil
+}
+
 func displayMediaFiles(db *sql.DB) {
 	row, err := db.Query("SELECT * FROM mediafile ORDER BY artist")
 	if err != nil {
@@ -234,6 +295,27 @@ func displayArtists(db *sql.DB) {
 		log.Println("artist: ", id, " ", path, " ", name, " ", city, " ", countrycode, " ", regioncode, " ", languagecode)
 	}
 	if err := row.Err(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func displayAlbums(db *sql.DB) {
+	rows, err := db.Query("SELECT id, path, name, year, explicitcover FROM album ORDER BY name")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int
+		var path, name string
+		var year int
+		var explicitcover bool
+		if err := rows.Scan(&id, &path, &name, &year, &explicitcover); err != nil {
+			log.Fatal(err)
+		}
+		log.Println("album: ", id, " ", path, " ", name, " ", year, " ", explicitcover)
+	}
+	if err := rows.Err(); err != nil {
 		log.Fatal(err)
 	}
 }

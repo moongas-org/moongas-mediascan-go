@@ -41,25 +41,44 @@ graph TD;
 
 ## Features
 
-- Suports reading metadata Moongas metadata file formats such as `artist.yml` files
+- Suports reading metadata Moongas metadata file formats such as `artist.yml` and `album.yml` files
 - Output format (SQLite database) is compatible with the Moongas `mediascan` python package
 
 ## Database Schema
 
-The output database contains two tables:
+The output database contains three tables:
 
 | Table | Contents |
 | ----- | -------- |
 | mediafile | Track metadata from individual media files (ID3 tag information read from `mp3` files) |
 | artist | Metadata from `artist.yml` files |
+| album | One row per unique media-file album path, with `path`, `name`, `year`, and `explicitcover` fields |
+
+Album metadata comes from `album.yml` in the album directory: `albumData.name`,
+`albumData.dateReleased.y`, and `albumData.explicitCover`. If the file is
+missing, the name and year come from the first media file associated with that
+album path in scan order, and `explicitcover` defaults to `false`.
 
 ## Usage
 
 ### Scan to Database
 
-- [`cmd/scan-to-db`](./cmd/scan-to-db) - Scans media libraries for both mediafiles and moongas `artist.yml` files, outputs an SQLite database (`.db`) file
+- [`cmd/scan-to-db`](./cmd/scan-to-db) - Scans media libraries for mediafiles and moongas `artist.yml` and `album.yml` files, outputs an SQLite database (`.db`) file
 ```bash
 go run cmd/scan-to-db mediascan-config.yml mediascan.db
+```
+
+### Generate Album YAML
+
+- [`cmd/scan-to-album-yaml`](./cmd/scan-to-album-yaml) - Creates an `album.yml`
+  in each unique album directory found by the media-file scan. Existing files
+  are always preserved; overwrite flags are not supported.
+- Uses the first media file in scan order for `albumData.name` (album tag) and
+  `albumData.dateReleased.y` (year tag). Sets `albumData.explicitCover` to
+  `false` and omits release month and day.
+
+```bash
+go run ./cmd/scan-to-album-yaml mediascan-config.yml [media-root]
 ```
 
 ### Scan to YAML (deprecated)
