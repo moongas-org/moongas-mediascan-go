@@ -7,7 +7,10 @@ type TrackIDData struct {
 	// for clean re-marshaling
 
 	// Fpcalc data (audio fingerprinting)
-	FpcalcData *TrackFpCalcData `yaml:"fpcalcData,omitempty"`
+	FpCalcData *TrackFpCalcData `yaml:"fpcalcData,omitempty"`
+
+	// AcoustID data (as returned by api.acoustid.org)
+	AcoustIDData *TrackAcoustIDData `yaml:"acoustidData,omitempty"`
 
 	// Industry standard key for cross-platform matching
 	ISRC *string `yaml:"isrc,omitempty"`
