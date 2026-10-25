@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"gopkg.in/yaml.v3"
 )
 
 func TestWriteAlbumYamlFiles(t *testing.T) {
 	first, second := t.TempDir(), t.TempDir()
-	files := []shared.MediaFileData{
+	files := []media_file.MediaFileData{
 		{AlbumPath: first, Album: "First album", Year: 1993},
 		{AlbumPath: second, Album: "Other album", Year: 2000},
 		{AlbumPath: first, Album: "Later tags", Year: 2020},
@@ -60,7 +60,7 @@ func TestWriteAlbumYamlFilesPreservesExisting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			files := []shared.MediaFileData{{AlbumPath: dir, Album: "Replacement", Year: 2020}}
+			files := []media_file.MediaFileData{{AlbumPath: dir, Album: "Replacement", Year: 2020}}
 			if err := writeAlbumYamlFiles(files); err != nil {
 				t.Fatal(err)
 			}
@@ -86,7 +86,7 @@ func TestWriteAlbumYamlFilesPreservesDanglingSymlink(t *testing.T) {
 	if err := os.Symlink(target, path); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeAlbumYamlFiles([]shared.MediaFileData{{AlbumPath: dir}}); err != nil {
+	if err := writeAlbumYamlFiles([]media_file.MediaFileData{{AlbumPath: dir}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -102,7 +102,7 @@ func TestWriteAlbumYamlFilesEmpty(t *testing.T) {
 
 func TestWriteAlbumYamlFilesReportsCreateError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "missing")
-	err := writeAlbumYamlFiles([]shared.MediaFileData{{AlbumPath: dir}})
+	err := writeAlbumYamlFiles([]media_file.MediaFileData{{AlbumPath: dir}})
 	if err == nil || !strings.Contains(err.Error(), filepath.Join(dir, "album.yml")) {
 		t.Fatalf("expected create error with album.yml path, got %v", err)
 	}

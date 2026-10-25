@@ -12,7 +12,7 @@
 *.test
 
 # Cmd binaries in project root
-/scan-to-*
+scan-to-*
 
 # Code coverage profiles and other test artifacts
 *.out

@@ -1,3 +1,4 @@
+// Package main scans media and stores its metadata in a database.
 package main
 
 // Unlike the yaml scanners, this one scans everything in one cmd,
@@ -15,14 +16,19 @@ import (
 
 	_ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
 
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
+	artist_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/artist"
+	media_file_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/album"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"gopkg.in/yaml.v3"
 )
 
 func main() {
-	shared.LogCurrentDir()
+	cli.LogCurrentDir()
 
-	overwriteMode, args, err := shared.ParseCommandArgs(os.Args, 2, 3)
+	overwriteMode, args, err := cli.ParseCommandArgs(os.Args, 2, 3)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		fmt.Fprintln(os.Stderr, "Usage: go run cmd/scan-to-db <config-yaml> <output-db> [media-root] [--overwrite-existing|--overwrite-newer]")
@@ -36,19 +42,19 @@ func main() {
 		mediaRootDir = args[2]
 	}
 
-	conf, err := shared.ResolveScanConfig(configYamlFilepath, mediaRootDir)
+	conf, err := cli.ResolveScanConfig(configYamlFilepath, mediaRootDir)
 	if err != nil {
 		log.Printf("ERROR: %v", err)
 		os.Exit(1)
 	}
 
-	outputDBAbsFilepath, err := shared.ResolveOutputAbsPath(outputDBFilepath)
+	outputDBAbsFilepath, err := cli.ResolveOutputAbsPath(outputDBFilepath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if _, err := os.Stat(outputDBFilepath); err == nil {
-		shouldOverwrite, err := shared.ShouldOverwriteFile(outputDBFilepath, "", overwriteMode)
+		shouldOverwrite, err := cli.ShouldOverwriteFile(outputDBFilepath, "", overwriteMode)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -58,8 +64,8 @@ func main() {
 		}
 	}
 
-	var files = shared.ScanFiles(conf)
-	var artists = shared.ScanArtists(conf)
+	var files = media_file_scanner.ScanFiles(conf)
+	var artists = artist_scanner.ScanArtists(conf)
 
 	os.Remove(outputDBFilepath)
 
@@ -217,32 +223,32 @@ func createTableAlbum(db *sql.DB) error {
 	return nil
 }
 
-func insertAlbums(db *sql.DB, files []shared.MediaFileData) error {
+func insertAlbums(db *sql.DB, files []media_file.MediaFileData) error {
 	seen := make(map[string]bool)
 	for _, mf := range files {
 		if seen[mf.AlbumPath] {
 			continue
 		}
 
-		album := shared.AlbumData{
+		albumData := album.AlbumData{
 			Name:         mf.Album,
-			DateReleased: shared.Date{Y: mf.Year},
+			DateReleased: types.Date{Y: mf.Year},
 		}
 		path := filepath.Join(mf.AlbumPath, "album.yml")
 		data, err := os.ReadFile(path)
 		if err == nil {
-			var file shared.AlbumYamlFile
+			var file album.AlbumYamlFile
 			if err := yaml.Unmarshal(data, &file); err != nil {
 				return fmt.Errorf("parse %s: %w", path, err)
 			}
-			album = file.AlbumData
+			albumData = file.AlbumData
 		} else if !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("read %s: %w", path, err)
 		}
 
 		log.Println("Inserting album record ...")
 		_, err = db.Exec(`INSERT INTO album(path, name, year, explicitcover) VALUES (?, ?, ?, ?)`,
-			mf.AlbumPath, album.Name, album.DateReleased.Y, album.ExplicitCover)
+			mf.AlbumPath, albumData.Name, albumData.DateReleased.Y, albumData.ExplicitCover)
 		if err != nil {
 			return fmt.Errorf("insert album %s: %w", mf.AlbumPath, err)
 		}

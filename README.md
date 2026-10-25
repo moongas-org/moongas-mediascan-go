@@ -81,6 +81,20 @@ go run cmd/scan-to-db mediascan-config.yml mediascan.db
 go run ./cmd/scan-to-album-yaml mediascan-config.yml [media-root]
 ```
 
+### Update Track Fingerprints
+
+- [`cmd/fpcalc-to-track-yaml`](./cmd/fpcalc-to-track-yaml) runs `fpcalc --json`
+  for media files that have an existing matching track `.yml` file but lack
+  fpcalc duration or fingerprint data. It only updates the `fpcalcData` fields
+  and creates a `.yml.bak` backup before modifying a track YAML file.
+- Requires `fpcalc` to be installed and available on `PATH`.
+- Accepts the same overwrite flags as the other scan commands:
+  `--overwrite-existing` and `--overwrite-newer`.
+
+```bash
+go run ./cmd/fpcalc-to-track-yaml mediascan-config.yml [media-root]
+```
+
 ### Scan to YAML (deprecated)
 
 These commands scan media files and `artist.yml` files and output massive combined YAML (.yml) files. This was the original implementation before switching to sqlite. These may be removed in the future.

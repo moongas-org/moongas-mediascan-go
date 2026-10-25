@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 )
 
 func newAlbumTestDB(t *testing.T) *sql.DB {
@@ -73,7 +73,7 @@ func TestInsertAlbums(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			files := []shared.MediaFileData{
+			files := []media_file.MediaFileData{
 				{AlbumPath: dir, Album: "Tagged album", Year: 1980},
 				{AlbumPath: dir, Album: "Later album", Year: 2020},
 			}
@@ -106,7 +106,7 @@ func TestInsertAlbums(t *testing.T) {
 func TestInsertAlbumsUniquePaths(t *testing.T) {
 	db := newAlbumTestDB(t)
 	first, second := t.TempDir(), t.TempDir()
-	files := []shared.MediaFileData{
+	files := []media_file.MediaFileData{
 		{AlbumPath: first, Album: "Same name", Year: 1990},
 		{AlbumPath: second, Album: "Same name", Year: 1990},
 		{AlbumPath: first, Album: "Duplicate", Year: 2000},
@@ -160,7 +160,7 @@ func TestInsertAlbumsReportsMetadataErrors(t *testing.T) {
 			} else if err := os.WriteFile(path, []byte("albumData: ["), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			err := insertAlbums(db, []shared.MediaFileData{{AlbumPath: dir}})
+			err := insertAlbums(db, []media_file.MediaFileData{{AlbumPath: dir}})
 			if err == nil || !strings.Contains(err.Error(), tt.want+path) {
 				t.Fatalf("got error %v, want %q with metadata path", err, tt.want)
 			}

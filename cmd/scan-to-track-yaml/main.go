@@ -1,3 +1,4 @@
+// Package main scans media and writes track metadata as YAML.
 package main
 
 import (
@@ -6,14 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
+	media_file_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/utils"
 	"gopkg.in/yaml.v3"
 )
 
 func main() {
-	shared.LogCurrentDir()
+	cli.LogCurrentDir()
 
-	overwriteMode, args, err := shared.ParseCommandArgs(os.Args, 1, 2)
+	overwriteMode, args, err := cli.ParseCommandArgs(os.Args, 1, 2)
 	if err != nil {
 		log.Println("Error:", err)
 		log.Println("Usage: go run cmd/scan-to-track-yaml <config-yaml> [media-root] [--overwrite-existing|--overwrite-newer]")
@@ -26,13 +30,13 @@ func main() {
 		mediaRootDir = args[1]
 	}
 
-	conf, err := shared.ResolveScanConfig(configYamlFilepath, mediaRootDir)
+	conf, err := cli.ResolveScanConfig(configYamlFilepath, mediaRootDir)
 	if err != nil {
 		log.Printf("ERROR: %v", err)
 		os.Exit(1)
 	}
 
-	files := shared.ScanFiles(conf)
+	files := media_file_scanner.ScanFiles(conf)
 
 	countCreated := 0
 	countSkipped := 0
@@ -40,7 +44,7 @@ func main() {
 		ext := filepath.Ext(m.Path)
 		trackYamlFilepath := filepath.Join(m.AlbumPath, strings.TrimSuffix(filepath.Base(m.Path), ext)+".yml")
 		if _, err := os.Stat(trackYamlFilepath); err == nil {
-			shouldOverwrite, err := shared.ShouldOverwriteFile(trackYamlFilepath, m.Path, overwriteMode)
+			shouldOverwrite, err := cli.ShouldOverwriteFile(trackYamlFilepath, m.Path, overwriteMode)
 			if err != nil {
 				log.Printf("ERROR: %v", err)
 				continue
@@ -52,8 +56,8 @@ func main() {
 			}
 		}
 
-		trackYaml := shared.TrackYamlFile{
-			TrackData: shared.TrackData{
+		trackYaml := track.TrackYamlFile{
+			TrackData: track.TrackData{
 				Title:       m.Title,
 				Artist:      m.Artist,
 				AlbumArtist: m.AlbumArtist,
@@ -63,9 +67,9 @@ func main() {
 			},
 		}
 		yamlData, err := yaml.Marshal(&trackYaml)
-		shared.Check(err, trackYamlFilepath)
+		utils.Check(err, trackYamlFilepath)
 		err = os.WriteFile(trackYamlFilepath, yamlData, 0644)
-		shared.Check(err, trackYamlFilepath)
+		utils.Check(err, trackYamlFilepath)
 		log.Printf("Created %s", trackYamlFilepath)
 		countCreated += 1
 	}

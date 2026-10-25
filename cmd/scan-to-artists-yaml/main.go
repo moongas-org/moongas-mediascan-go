@@ -1,3 +1,4 @@
+// Package main scans media and writes artist metadata as YAML.
 package main
 
 import (
@@ -5,14 +6,17 @@ import (
 	"log"
 	"os"
 
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
+	artist_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/artist"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/artists"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/utils"
 	"gopkg.in/yaml.v3"
 )
 
 func main() {
-	shared.LogCurrentDir()
+	cli.LogCurrentDir()
 
-	overwriteMode, args, err := shared.ParseCommandArgs(os.Args, 2, 3)
+	overwriteMode, args, err := cli.ParseCommandArgs(os.Args, 2, 3)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		fmt.Fprintln(os.Stderr, "Usage: go run cmd/scan-to-artists-yaml <config-yaml> <output-yaml> [media-root] [--overwrite-existing|--overwrite-newer]")
@@ -26,19 +30,19 @@ func main() {
 		mediaRootDir = args[2]
 	}
 
-	conf, err := shared.ResolveScanConfig(configYamlFilepath, mediaRootDir)
+	conf, err := cli.ResolveScanConfig(configYamlFilepath, mediaRootDir)
 	if err != nil {
 		log.Printf("ERROR: %v", err)
 		os.Exit(1)
 	}
 
-	outputYamlAbsFilepath, err := shared.ResolveOutputAbsPath(outputYamlFilepath)
+	outputYamlAbsFilepath, err := cli.ResolveOutputAbsPath(outputYamlFilepath)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if _, err := os.Stat(outputYamlFilepath); err == nil {
-		shouldOverwrite, err := shared.ShouldOverwriteFile(outputYamlFilepath, "", overwriteMode)
+		shouldOverwrite, err := cli.ShouldOverwriteFile(outputYamlFilepath, "", overwriteMode)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -48,15 +52,15 @@ func main() {
 		}
 	}
 
-	var artists = shared.ScanArtists(conf)
-	var artistsYamlFile = shared.ArtistsYamlFile{}
-	artistsYamlFile.Artists = artists
+	scannedArtists := artist_scanner.ScanArtists(conf)
+	var artistsYamlFile = artists.ArtistsYamlFile{}
+	artistsYamlFile.Artists = scannedArtists
 
 	yamlData, err := yaml.Marshal(&artistsYamlFile)
-	shared.Check(err, "")
+	utils.Check(err, "")
 	err2 := os.WriteFile(outputYamlAbsFilepath, yamlData, 0644)
-	shared.Check(err2, outputYamlAbsFilepath)
+	utils.Check(err2, outputYamlAbsFilepath)
 
-	log.Printf("Successfully loaded %d artist.yml files", len(artists))
+	log.Printf("Successfully loaded %d artist.yml files", len(scannedArtists))
 	log.Printf("Written to file %s", outputYamlAbsFilepath)
 }
