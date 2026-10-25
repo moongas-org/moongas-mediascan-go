@@ -39,11 +39,17 @@ func TestTrackIDDataFpCalcDataYaml(t *testing.T) {
 }
 
 func TestTrackIDDataAcoustIdDataYaml(t *testing.T) {
-	data := []byte(`acoustIDData:
+	data := []byte(`acoustidData:
   results:
     - id: acoustid-123
       recordings:
         - id: recording-456
+          isrcs:
+            - USSM18500120
+            - GBARL8500001
+        - id: recording-789
+          isrcs:
+            - USSM10203456
       score: 0.98
   status: ok
 `)
@@ -59,18 +65,36 @@ func TestTrackIDDataAcoustIdDataYaml(t *testing.T) {
 		t.Fatalf("unexpected AcoustID response: %#v", trackIDData.AcoustIDData)
 	}
 	result := trackIDData.AcoustIDData.Results[0]
-	if result.ID != "acoustid-123" || result.Score != 0.98 || len(result.Recordings) != 1 {
+	if result.ID != "acoustid-123" || result.Score != 0.98 || len(result.Recordings) != 2 {
 		t.Fatalf("unexpected AcoustID result: %#v", result)
 	}
-	if result.Recordings[0].ID != "recording-456" {
-		t.Errorf("unexpected recording ID: %q", result.Recordings[0].ID)
+	if result.Recordings[0].ID != "recording-456" ||
+		len(result.Recordings[0].ISRCs) != 2 ||
+		result.Recordings[0].ISRCs[0] != "USSM18500120" ||
+		result.Recordings[0].ISRCs[1] != "GBARL8500001" {
+		t.Errorf("unexpected first recording: %#v", result.Recordings[0])
+	}
+	if result.Recordings[1].ID != "recording-789" ||
+		len(result.Recordings[1].ISRCs) != 1 ||
+		result.Recordings[1].ISRCs[0] != "USSM10203456" {
+		t.Errorf("unexpected second recording: %#v", result.Recordings[1])
 	}
 
 	out, err := yaml.Marshal(trackIDData)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	for _, want := range []string{"acoustIDData:", "status: ok", "id: acoustid-123", "id: recording-456", "score: 0.98"} {
+	for _, want := range []string{
+		"acoustidData:",
+		"status: ok",
+		"id: acoustid-123",
+		"id: recording-456",
+		"USSM18500120",
+		"GBARL8500001",
+		"id: recording-789",
+		"USSM10203456",
+		"score: 0.98",
+	} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("expected %q in marshaled yaml, got:\n%s", want, out)
 		}

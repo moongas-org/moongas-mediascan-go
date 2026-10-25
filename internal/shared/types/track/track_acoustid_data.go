@@ -15,5 +15,6 @@ type TrackAcoustIDResult struct {
 
 // TrackAcoustIDRecording identifies a recording associated with an AcoustID match.
 type TrackAcoustIDRecording struct {
-	ID string `yaml:"id"`
+	ID    string   `yaml:"id"`
+	ISRCs []string `yaml:"isrcs"`
 }
