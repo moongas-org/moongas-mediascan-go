@@ -83,9 +83,67 @@ go run ./cmd/scan-to-album-yaml mediascan-config.yml [media-root]
 
 ### Update Track Fingerprints
 
+Track YAML stores streaming identifiers and API responses in a `streamingData`
+list inside the optional `trackIdData` object, replacing the former flat `isrc`,
+`spotifyId`, `spotifyUri`, `spotifyUrl`, and other service-specific ID/URL fields:
+
+```yaml
+trackIdData:
+  streamingData:
+    - streamingService: spotify
+      isrc: USSM10027739
+      trackId: 0ZYf6N5eBeXStMri0mf3DZ
+      trackUrl: https://open.spotify.com/track/0ZYf6N5eBeXStMri0mf3DZ
+      apiData:
+        tracks:
+          items: []
+mediaFileData:
+  - fpcalcData:
+      duration: 263.62
+      fingerprint: example-fingerprint
+    acoustidData:
+      results:
+        - id: example-acoustid-result
+          recordings:
+            - id: example-musicbrainz-recording
+              title: Example Song
+              length: 263620
+              video: false
+              firstReleaseDate: "1985-06-01"
+              isrcs: [USSM10027739]
+          score: 0.98
+      status: ok
+```
+
+Each list item uses `StreamingData[any]`; API responses loaded from YAML or JSON
+are generic maps rather than service-specific structs. Empty lists are omitted.
+`streamingService` identifies the provider using the same names as the Python
+project (for example `spotify`, `apple-music`, and `youtube-music`); custom
+service names are also supported.
+Existing flat fields are not automatically migrated.
+
+`trackIdData` is a single object, not a list, and contains only streaming data.
+It may be omitted or null; the previous list form is no longer accepted.
+Fingerprints and AcoustID results
+belong to the top-level `mediaFileData` list, matching the Python project.
+Each entry uses `TrackMediaFileData`: all file metadata fields are optional,
+so fingerprint-only entries are supported. This is separate from the scanner's
+`MediaFileData` type, whose existing behavior is unchanged. AcoustID recording
+metadata supports optional title, length (milliseconds), video, disambiguation,
+first release date, and ISRCs. Legacy fingerprints under `trackIdData` are not
+automatically migrated.
+
+Track YAML/JSON decoding requires the same mandatory fields as Python:
+`trackData` and all six core metadata fields; `streamingService`, `trackUrl`,
+`trackId`, and `apiData` on streaming entries; `results` and `status` on AcoustID
+responses; `id`, `recordings`, and `score` on AcoustID results; and `id` on
+recordings. Missing fields return errors. Explicit zero values remain valid,
+and optional fields may be omitted.
+
 - [`cmd/fpcalc-to-track-yaml`](./cmd/fpcalc-to-track-yaml) runs `fpcalc --json`
   for media files that have an existing matching track `.yml` file but lack
-  fpcalc duration or fingerprint data. It only updates the `fpcalcData` fields
+  fpcalc duration or fingerprint data. It only updates the
+  `mediaFileData[].fpcalcData` fields
   and creates a `.yml.bak` backup before modifying a track YAML file.
 - Requires `fpcalc` to be installed and available on `PATH`.
 - Accepts the same overwrite flags as the other scan commands:

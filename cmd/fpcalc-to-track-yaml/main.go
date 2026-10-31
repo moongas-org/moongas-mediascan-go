@@ -142,16 +142,16 @@ func needsFpcalcData(data []byte) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	trackIDs, err := trackIDSequence(root, false)
+	mediaFiles, err := mediaFileSequence(root, false)
 	if err != nil {
 		return false, err
 	}
-	if trackIDs == nil {
+	if mediaFiles == nil {
 		return true, nil
 	}
-	for _, entry := range trackIDs.Content {
+	for _, entry := range mediaFiles.Content {
 		if entry.Kind != yaml.MappingNode {
-			return false, fmt.Errorf("trackIdData entries must be mappings")
+			return false, fmt.Errorf("mediaFileData entries must be mappings")
 		}
 		fpcalcNode := mappingValue(entry, "fpcalcData")
 		if fpcalcNode != nil {
@@ -169,24 +169,29 @@ func updateTrackYamlFile(path string, original []byte, data track.TrackFpCalcDat
 	if err != nil {
 		return false, err
 	}
-	trackIDs, err := trackIDSequence(root, true)
+	mediaFiles, err := mediaFileSequence(root, true)
 	if err != nil {
 		return false, err
 	}
 
 	var fpcalcNode *yaml.Node
-	for _, entry := range trackIDs.Content {
+	for _, entry := range mediaFiles.Content {
 		if entry.Kind != yaml.MappingNode {
-			return false, fmt.Errorf("trackIdData entries must be mappings")
+			return false, fmt.Errorf("mediaFileData entries must be mappings")
 		}
 		if fpcalcNode = mappingValue(entry, "fpcalcData"); fpcalcNode != nil {
 			break
 		}
 	}
 	if fpcalcNode == nil {
-		entry := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		var entry *yaml.Node
+		if len(mediaFiles.Content) > 0 {
+			entry = mediaFiles.Content[0]
+		} else {
+			entry = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			mediaFiles.Content = append(mediaFiles.Content, entry)
+		}
 		appendMappingValue(entry, "fpcalcData", &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
-		trackIDs.Content = append(trackIDs.Content, entry)
 		fpcalcNode = mappingValue(entry, "fpcalcData")
 	} else if fpcalcNode.Kind != yaml.MappingNode {
 		if fpcalcNode.Tag != "!!null" {
@@ -230,26 +235,26 @@ func parseYamlRoot(data []byte) (*yaml.Node, error) {
 	return document.Content[0], nil
 }
 
-func trackIDSequence(root *yaml.Node, create bool) (*yaml.Node, error) {
-	trackIDs := mappingValue(root, "trackIdData")
-	if trackIDs == nil {
+func mediaFileSequence(root *yaml.Node, create bool) (*yaml.Node, error) {
+	mediaFiles := mappingValue(root, "mediaFileData")
+	if mediaFiles == nil {
 		if !create {
 			return nil, nil
 		}
-		trackIDs = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
-		appendMappingValue(root, "trackIdData", trackIDs)
-		return trackIDs, nil
+		mediaFiles = &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		appendMappingValue(root, "mediaFileData", mediaFiles)
+		return mediaFiles, nil
 	}
-	if trackIDs.Tag == "!!null" {
+	if mediaFiles.Tag == "!!null" {
 		if !create {
 			return nil, nil
 		}
-		*trackIDs = yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+		*mediaFiles = yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
 	}
-	if trackIDs.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("trackIdData must be a sequence")
+	if mediaFiles.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("mediaFileData must be a sequence")
 	}
-	return trackIDs, nil
+	return mediaFiles, nil
 }
 
 func validFpcalcNode(node *yaml.Node) bool {
