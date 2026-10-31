@@ -72,18 +72,23 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 				}
 
 				var m media_file.MediaFileData
-				m.Path = path                                  // path to media file
+				m.Path = utils.Pointer(path)                   // path to media file
 				var albumDirPath = filepath.Dir(path)          // path to album dir
 				var artistDirPath = filepath.Dir(albumDirPath) // path to artist dir
 				m.AlbumPath = albumDirPath
 				m.ArtistPath = artistDirPath
-				m.Size = info.Size()
-				m.ModTime = info.ModTime()
-				m.Duration = 0.0
-				m.Format = ""
+				m.Size = utils.Pointer(info.Size())
+				m.ModTime = utils.Pointer(info.ModTime())
+				m.Duration = utils.Pointer(0.0)
+				m.Format = utils.Pointer("")
+				m.Artist = utils.Pointer("")
+				m.AlbumArtist = utils.Pointer("")
+				m.Album = utils.Pointer("")
+				m.Genre = utils.Pointer("")
+				m.Year = utils.Pointer(0)
 				ext := filepath.Ext(info.Name())
 				name := strings.TrimSuffix(info.Name(), ext)
-				m.Title = name
+				m.Title = utils.Pointer(name)
 
 				log.Printf("Reading filepath %s", path)
 				if info.IsDir() {
@@ -134,17 +139,17 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 						return nil
 					}
 
-					m.Format = string(tags.Format())
-					m.Title = tags.Title()
-					m.Artist = tags.Artist()
-					m.AlbumArtist = tags.AlbumArtist()
-					m.Album = tags.Album()
-					m.Genre = tags.Genre()
-					m.Year = tags.Year()
+					m.Format = utils.Pointer(string(tags.Format()))
+					m.Title = utils.Pointer(tags.Title())
+					m.Artist = utils.Pointer(tags.Artist())
+					m.AlbumArtist = utils.Pointer(tags.AlbumArtist())
+					m.Album = utils.Pointer(tags.Album())
+					m.Genre = utils.Pointer(tags.Genre())
+					m.Year = utils.Pointer(tags.Year())
 				}
 
 				if conf.GetMp3Duration && ext == ".mp3" {
-					m.Duration = getMp3Duration(path)
+					m.Duration = utils.Pointer(getMp3Duration(path))
 				}
 
 				files = append(files, m)
@@ -160,11 +165,11 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 	switch conf.SortBy {
 	case "year":
 		sort.SliceStable(files, func(i, j int) bool {
-			return files[i].Year < files[j].Year
+			return *files[i].Year < *files[j].Year
 		})
 	case "artist":
 		sort.SliceStable(files, func(i, j int) bool {
-			return files[i].Artist < files[j].Artist
+			return *files[i].Artist < *files[j].Artist
 		})
 	}
 

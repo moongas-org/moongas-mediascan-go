@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"gopkg.in/yaml.v3"
 )
 
@@ -96,7 +96,7 @@ mediaFileData:
 
 	duration := 12.5
 	fingerprint := "new-fingerprint"
-	updated, err := updateTrackYamlFile(path, original, track.TrackFpCalcData{
+	updated, err := updateTrackYamlFile(path, original, media_file.MediaFileFpCalcData{
 		Duration:    &duration,
 		Fingerprint: &fingerprint,
 	})
@@ -133,7 +133,7 @@ mediaFileData:
 		t.Fatal("updated YAML is still missing fpcalc data")
 	}
 	var typed struct {
-		MediaFileData []track.TrackMediaFileData `yaml:"mediaFileData"`
+		MediaFileData []media_file.MediaFileData `yaml:"mediaFileData"`
 	}
 	if err := yaml.Unmarshal(updatedYaml, &typed); err != nil {
 		t.Fatal(err)
@@ -162,7 +162,7 @@ mediaFileData:
 
 	duration := 2.25
 	fingerprint := "replacement"
-	updated, err := updateTrackYamlFile(path, original, track.TrackFpCalcData{
+	updated, err := updateTrackYamlFile(path, original, media_file.MediaFileFpCalcData{
 		Duration:    &duration,
 		Fingerprint: &fingerprint,
 	})
@@ -198,7 +198,7 @@ func TestUpdateTrackYamlFileDoesNotWriteWhenUnchanged(t *testing.T) {
 
 	duration := 12.5
 	fingerprint := "abc"
-	result := track.TrackFpCalcData{Duration: &duration, Fingerprint: &fingerprint}
+	result := media_file.MediaFileFpCalcData{Duration: &duration, Fingerprint: &fingerprint}
 	if _, err := updateTrackYamlFile(path, original, result); err != nil {
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func TestFpcalcRejectsInvalidMediaFileData(t *testing.T) {
 				t.Fatal("expected schema validation error")
 			}
 			path := filepath.Join(t.TempDir(), "song.yml")
-			if _, err := updateTrackYamlFile(path, []byte(input), track.TrackFpCalcData{
+			if _, err := updateTrackYamlFile(path, []byte(input), media_file.MediaFileFpCalcData{
 				Duration: &duration, Fingerprint: &fingerprint,
 			}); err == nil {
 				t.Fatal("expected schema validation error during update")
@@ -258,7 +258,7 @@ func TestUpdateTrackYamlFileCreatesOptionalFpcalcData(t *testing.T) {
 			if err := os.WriteFile(path, []byte(input), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if changed, err := updateTrackYamlFile(path, []byte(input), track.TrackFpCalcData{
+			if changed, err := updateTrackYamlFile(path, []byte(input), media_file.MediaFileFpCalcData{
 				Duration: &duration, Fingerprint: &fingerprint,
 			}); err != nil || !changed {
 				t.Fatalf("expected update, got changed=%t, err=%v", changed, err)
@@ -268,7 +268,7 @@ func TestUpdateTrackYamlFileCreatesOptionalFpcalcData(t *testing.T) {
 				t.Fatal(err)
 			}
 			var data struct {
-				MediaFileData []track.TrackMediaFileData `yaml:"mediaFileData"`
+				MediaFileData []media_file.MediaFileData `yaml:"mediaFileData"`
 			}
 			if err := yaml.Unmarshal(out, &data); err != nil {
 				t.Fatal(err)

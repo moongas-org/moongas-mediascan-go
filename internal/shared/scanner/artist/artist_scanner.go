@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/artist"
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/artists"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/conf"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/utils"
 	"gopkg.in/yaml.v3"
 )
 
-func ScanArtists(conf conf.MediascanConf) []artists.ArtistsYamlArtistData {
-	var scannedArtists []artists.ArtistsYamlArtistData
+// ScanArtists returns artist.yml metadata with its containing directory.
+func ScanArtists(conf conf.MediascanConf) []artist.Artist {
+	var scannedArtists []artist.Artist
 	countLoadFailed := 0
 	countSkipped := 0
 	for _, mediaDir := range conf.MediaDirs {
@@ -41,7 +41,7 @@ func ScanArtists(conf conf.MediascanConf) []artists.ArtistsYamlArtistData {
 						countSkipped += 1
 						return nil
 					}
-					var a artists.ArtistsYamlArtistData
+					var a artist.Artist
 					a.Path = filepath.Dir(path)
 
 					// Read the YAML file
@@ -53,7 +53,7 @@ func ScanArtists(conf conf.MediascanConf) []artists.ArtistsYamlArtistData {
 					err = yaml.Unmarshal(data, &dataFile)
 					utils.Check(err, path)
 
-					a.ArtistData = dataFile.ArtistData
+					a.ArtistYamlFile = dataFile
 
 					scannedArtists = append(scannedArtists, a)
 				}

@@ -8,15 +8,16 @@ import (
 	"testing"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/utils"
 	"gopkg.in/yaml.v3"
 )
 
 func TestWriteAlbumYamlFiles(t *testing.T) {
 	first, second := t.TempDir(), t.TempDir()
 	files := []media_file.MediaFileData{
-		{AlbumPath: first, Album: "First album", Year: 1993},
-		{AlbumPath: second, Album: "Other album", Year: 2000},
-		{AlbumPath: first, Album: "Later tags", Year: 2020},
+		{AlbumPath: first, Album: utils.Pointer("First album"), Year: utils.Pointer(1993)},
+		{AlbumPath: second, Album: utils.Pointer("Other album"), Year: utils.Pointer(2000)},
+		{AlbumPath: first, Album: utils.Pointer("Later tags"), Year: utils.Pointer(2020)},
 	}
 	if err := writeAlbumYamlFiles(files); err != nil {
 		t.Fatal(err)
@@ -33,8 +34,8 @@ func TestWriteAlbumYamlFiles(t *testing.T) {
 		}
 		want := map[string]interface{}{
 			"albumData": map[string]interface{}{
-				"name":          m.Album,
-				"dateReleased":  map[string]interface{}{"y": m.Year},
+				"name":          *m.Album,
+				"dateReleased":  map[string]interface{}{"y": *m.Year},
 				"explicitCover": false,
 			},
 		}
@@ -60,7 +61,7 @@ func TestWriteAlbumYamlFilesPreservesExisting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			files := []media_file.MediaFileData{{AlbumPath: dir, Album: "Replacement", Year: 2020}}
+			files := []media_file.MediaFileData{{AlbumPath: dir, Album: utils.Pointer("Replacement"), Year: utils.Pointer(2020)}}
 			if err := writeAlbumYamlFiles(files); err != nil {
 				t.Fatal(err)
 			}

@@ -41,16 +41,16 @@ func main() {
 	countCreated := 0
 	countSkipped := 0
 	for _, m := range files {
-		ext := filepath.Ext(m.Path)
-		trackYamlFilepath := filepath.Join(m.AlbumPath, strings.TrimSuffix(filepath.Base(m.Path), ext)+".yml")
+		ext := filepath.Ext(*m.Path)
+		trackYamlFilepath := filepath.Join(m.AlbumPath, strings.TrimSuffix(filepath.Base(*m.Path), ext)+".yml")
 		if _, err := os.Stat(trackYamlFilepath); err == nil {
-			shouldOverwrite, err := cli.ShouldOverwriteFile(trackYamlFilepath, m.Path, overwriteMode)
+			shouldOverwrite, err := cli.ShouldOverwriteFile(trackYamlFilepath, *m.Path, overwriteMode)
 			if err != nil {
 				log.Printf("ERROR: %v", err)
 				continue
 			}
 			if !shouldOverwrite {
-				log.Printf("Skipping %s (%s already exists)", m.Path, trackYamlFilepath)
+				log.Printf("Skipping %s (%s already exists)", *m.Path, trackYamlFilepath)
 				countSkipped += 1
 				continue
 			}
@@ -58,12 +58,12 @@ func main() {
 
 		trackYaml := track.TrackYamlFile{
 			TrackData: track.TrackData{
-				Title:       m.Title,
-				Artist:      m.Artist,
-				AlbumArtist: m.AlbumArtist,
-				Album:       m.Album,
-				Genre:       m.Genre,
-				Year:        m.Year,
+				Title:       *m.Title,
+				Artist:      *m.Artist,
+				AlbumArtist: *m.AlbumArtist,
+				Album:       *m.Album,
+				Genre:       *m.Genre,
+				Year:        *m.Year,
 			},
 		}
 		yamlData, err := yaml.Marshal(&trackYaml)

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track/streaming"
 	"gopkg.in/yaml.v3"
 )
@@ -106,13 +107,13 @@ func TestTrackIDDataOmitsEmptyStreamingData(t *testing.T) {
 	}
 }
 
-func TestTrackMediaFileDataFpCalcDataYaml(t *testing.T) {
+func TestMediaFileDataFpCalcDataYaml(t *testing.T) {
 	data := []byte(`fpcalcData:
   duration: 123.5
   fingerprint: abc123
 `)
 
-	var mediaFileData TrackMediaFileData
+	var mediaFileData media_file.MediaFileData
 	if err := yaml.Unmarshal(data, &mediaFileData); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -137,7 +138,7 @@ func TestTrackMediaFileDataFpCalcDataYaml(t *testing.T) {
 	}
 }
 
-func TestTrackMediaFileDataAcoustIdDataYaml(t *testing.T) {
+func TestMediaFileDataAcoustIdDataYaml(t *testing.T) {
 	data := []byte(`acoustidData:
   results:
     - id: acoustid-123
@@ -153,7 +154,7 @@ func TestTrackMediaFileDataAcoustIdDataYaml(t *testing.T) {
   status: ok
 `)
 
-	var mediaFileData TrackMediaFileData
+	var mediaFileData media_file.MediaFileData
 	if err := yaml.Unmarshal(data, &mediaFileData); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}

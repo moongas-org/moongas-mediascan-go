@@ -1,5 +1,5 @@
-// Package types contains shared data types used across mediascan.
-package types
+// Package date defines partial calendar dates used in metadata.
+package date
 
 type Date struct {
 	Y int `yaml:"y"`

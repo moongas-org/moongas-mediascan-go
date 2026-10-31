@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/date"
 	"gopkg.in/yaml.v3"
 )
 
@@ -51,7 +51,7 @@ func TestArtistDataFileUnmarshal(t *testing.T) {
 }
 
 func TestDateMarshalOmitsZeroMonthAndDay(t *testing.T) {
-	out, err := yaml.Marshal(types.Date{Y: 1970})
+	out, err := yaml.Marshal(date.Date{Y: 1970})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}

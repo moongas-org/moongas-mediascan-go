@@ -52,20 +52,21 @@ func TestScanArtists_ReadsArtistYmlFiles(t *testing.T) {
 	if a.Path != artistDir {
 		t.Errorf("got path %q, want %q", a.Path, artistDir)
 	}
-	if len(a.ArtistData.ArtistNames) != 1 || a.ArtistData.ArtistNames[0] != "The Beatles" {
-		t.Errorf("unexpected artist names: %#v", a.ArtistData.ArtistNames)
+	data := a.ArtistYamlFile.ArtistData
+	if len(data.ArtistNames) != 1 || data.ArtistNames[0] != "The Beatles" {
+		t.Errorf("unexpected artist names: %#v", data.ArtistNames)
 	}
-	if a.ArtistData.City != "Liverpool" {
-		t.Errorf("got city %q, want %q", a.ArtistData.City, "Liverpool")
+	if data.City != "Liverpool" {
+		t.Errorf("got city %q, want %q", data.City, "Liverpool")
 	}
-	if a.ArtistData.CountryCode != "GB" || a.ArtistData.RegionCode != "ENG" {
-		t.Errorf("unexpected codes: %q %q", a.ArtistData.CountryCode, a.ArtistData.RegionCode)
+	if data.CountryCode != "GB" || data.RegionCode != "ENG" {
+		t.Errorf("unexpected codes: %q %q", data.CountryCode, data.RegionCode)
 	}
-	if len(a.ArtistData.LanguageCodes) != 1 || a.ArtistData.LanguageCodes[0] != "en" {
-		t.Errorf("unexpected language codes: %#v", a.ArtistData.LanguageCodes)
+	if len(data.LanguageCodes) != 1 || data.LanguageCodes[0] != "en" {
+		t.Errorf("unexpected language codes: %#v", data.LanguageCodes)
 	}
-	if a.ArtistData.DOB.Y != 1960 || a.ArtistData.DOB.M != 10 || a.ArtistData.DOB.D != 9 {
-		t.Errorf("unexpected dob: %#v", a.ArtistData.DOB)
+	if data.DOB.Y != 1960 || data.DOB.M != 10 || data.DOB.D != 9 {
+		t.Errorf("unexpected dob: %#v", data.DOB)
 	}
 }
 

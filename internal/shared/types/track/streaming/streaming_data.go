@@ -36,3 +36,9 @@ func (s *StreamingData[T]) UnmarshalYAML(node *yaml.Node) error {
 	*s = StreamingData[T](decoded)
 	return nil
 }
+
+func (s StreamingData[T]) MarshalYAML() (any, error) {
+	// An inline field with UnmarshalYAML is otherwise skipped by yaml.v3's encoder.
+	type streamingData StreamingData[T]
+	return streamingData(s), nil
+}

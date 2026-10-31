@@ -1,10 +1,12 @@
-package track
+package types_test
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track/streaming"
 	"gopkg.in/yaml.v3"
 )
@@ -17,12 +19,12 @@ func TestRequiredFields(t *testing.T) {
 		fields []string
 	}{
 		{
-			"track", func() any { return &TrackData{} },
+			"track", func() any { return &track.TrackData{} },
 			`{"title":"","artist":"","albumartist":"","album":"","genre":"","year":0}`,
 			[]string{"title", "artist", "albumartist", "album", "genre", "year"},
 		},
 		{
-			"track file", func() any { return &TrackYamlFile{} },
+			"track file", func() any { return &track.TrackYamlFile{} },
 			`{"trackData":{"title":"","artist":"","albumartist":"","album":"","genre":"","year":0}}`,
 			[]string{"trackData"},
 		},
@@ -37,15 +39,15 @@ func TestRequiredFields(t *testing.T) {
 			[]string{"streamingService", "trackUrl", "trackId", "apiData"},
 		},
 		{
-			"AcoustID response", func() any { return &TrackAcoustIDData{} },
+			"AcoustID response", func() any { return &media_file.MediaFileAcoustIDData{} },
 			`{"results":[],"status":""}`, []string{"results", "status"},
 		},
 		{
-			"AcoustID result", func() any { return &TrackAcoustIDResult{} },
+			"AcoustID result", func() any { return &media_file.MediaFileAcoustIDResult{} },
 			`{"id":"","recordings":[],"score":0}`, []string{"id", "recordings", "score"},
 		},
 		{
-			"AcoustID recording", func() any { return &TrackAcoustIDRecording{} },
+			"AcoustID recording", func() any { return &media_file.MediaFileAcoustIDRecording{} },
 			`{"id":""}`, []string{"id"},
 		},
 	}
@@ -114,11 +116,11 @@ func TestRequiredFieldsInNestedData(t *testing.T) {
 			var target any
 			switch {
 			case strings.Contains(input, "trackData"):
-				target = &TrackYamlFile{}
+				target = &track.TrackYamlFile{}
 			case strings.Contains(input, "streamingData"):
-				target = &TrackIDData{}
+				target = &track.TrackIDData{}
 			default:
-				target = &TrackMediaFileData{}
+				target = &media_file.MediaFileData{}
 			}
 			if err := unmarshal([]byte(input), target); err == nil {
 				t.Errorf("expected nested required-field error for %s", input)

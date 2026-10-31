@@ -36,11 +36,11 @@ func TestScanFilesFiltersMediaFiles(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("expected 1 media file, got %d", len(files))
 	}
-	if files[0].Path != trackPath {
-		t.Errorf("got path %q, want %q", files[0].Path, trackPath)
+	if files[0].Path == nil || *files[0].Path != trackPath {
+		t.Errorf("got path %v, want %q", files[0].Path, trackPath)
 	}
-	if files[0].Title != "Track" {
-		t.Errorf("got title %q, want %q", files[0].Title, "Track")
+	if files[0].Title == nil || *files[0].Title != "Track" {
+		t.Errorf("got title %v, want %q", files[0].Title, "Track")
 	}
 }
 
@@ -93,25 +93,25 @@ func TestScanFiles_ReadsTags(t *testing.T) {
 		t.Fatalf("expected 1 media file, got %d", len(files))
 	}
 	m := files[0]
-	if m.Title != "Song Title" {
-		t.Errorf("got title %q, want %q", m.Title, "Song Title")
+	if m.Title == nil || *m.Title != "Song Title" {
+		t.Errorf("got title %v, want %q", m.Title, "Song Title")
 	}
-	if m.Artist != "The Artist" {
-		t.Errorf("got artist %q, want %q", m.Artist, "The Artist")
+	if m.Artist == nil || *m.Artist != "The Artist" {
+		t.Errorf("got artist %v, want %q", m.Artist, "The Artist")
 	}
-	if m.AlbumArtist != "The Album Artist" {
-		t.Errorf("got album artist %q, want %q", m.AlbumArtist, "The Album Artist")
+	if m.AlbumArtist == nil || *m.AlbumArtist != "The Album Artist" {
+		t.Errorf("got album artist %v, want %q", m.AlbumArtist, "The Album Artist")
 	}
-	if m.Album != "The Album" {
-		t.Errorf("got album %q, want %q", m.Album, "The Album")
+	if m.Album == nil || *m.Album != "The Album" {
+		t.Errorf("got album %v, want %q", m.Album, "The Album")
 	}
-	if m.Genre != "Rock" {
-		t.Errorf("got genre %q, want %q", m.Genre, "Rock")
+	if m.Genre == nil || *m.Genre != "Rock" {
+		t.Errorf("got genre %v, want %q", m.Genre, "Rock")
 	}
-	if m.Year != 1999 {
-		t.Errorf("got year %d, want %d", m.Year, 1999)
+	if m.Year == nil || *m.Year != 1999 {
+		t.Errorf("got year %v, want %d", m.Year, 1999)
 	}
-	if m.Format == "" {
+	if m.Format == nil || *m.Format == "" {
 		t.Error("expected format to be set from tags")
 	}
 }
@@ -135,19 +135,24 @@ func TestScanFiles_PopulatesPathDerivedMetadata(t *testing.T) {
 	if want := filepath.Join(root, "Artist"); m.ArtistPath != want {
 		t.Errorf("got artist path %q, want %q", m.ArtistPath, want)
 	}
-	if m.Size != int64(len(content)) {
-		t.Errorf("got size %d, want %d", m.Size, len(content))
+	if m.Size == nil || *m.Size != int64(len(content)) {
+		t.Errorf("got size %v, want %d", m.Size, len(content))
 	}
-	if m.Title != "01 Song" {
-		t.Errorf("got title %q, want filename fallback %q", m.Title, "01 Song")
+	if m.Title == nil || *m.Title != "01 Song" {
+		t.Errorf("got title %v, want filename fallback %q", m.Title, "01 Song")
 	}
-	if m.Format != "" {
-		t.Errorf("expected empty format for unreadable tags, got %q", m.Format)
+	if m.Format == nil || *m.Format != "" {
+		t.Errorf("expected empty format for unreadable tags, got %v", m.Format)
 	}
-	if m.Year != 0 {
-		t.Errorf("expected zero year for unreadable tags, got %d", m.Year)
+	if m.Year == nil || *m.Year != 0 {
+		t.Errorf("expected zero year for unreadable tags, got %v", m.Year)
 	}
-	if m.ModTime.IsZero() {
+	if m.Artist == nil || *m.Artist != "" || m.AlbumArtist == nil || *m.AlbumArtist != "" ||
+		m.Album == nil || *m.Album != "" || m.Genre == nil || *m.Genre != "" ||
+		m.Duration == nil || *m.Duration != 0 {
+		t.Error("expected explicit empty metadata and zero duration for unreadable tags")
+	}
+	if m.ModTime == nil || m.ModTime.IsZero() {
 		t.Error("expected mod time to be set")
 	}
 }
@@ -181,7 +186,10 @@ func TestScanFiles_SortsResults(t *testing.T) {
 				t.Fatalf("expected %d media files, got %d", len(test.wantOrder), len(files))
 			}
 			for i, want := range test.wantOrder {
-				if got := filepath.Base(files[i].Path); got != want {
+				if files[i].Path == nil {
+					t.Fatal("expected scanned file path")
+				}
+				if got := filepath.Base(*files[i].Path); got != want {
 					t.Errorf("file %d: got %q, want %q", i, got, want)
 				}
 			}
@@ -217,8 +225,8 @@ func TestScanFiles_ExcludesByTags(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("expected 1 media file, got %d", len(files))
 	}
-	if files[0].Path != keepPath {
-		t.Errorf("got path %q, want %q", files[0].Path, keepPath)
+	if files[0].Path == nil || *files[0].Path != keepPath {
+		t.Errorf("got path %v, want %q", files[0].Path, keepPath)
 	}
 }
 

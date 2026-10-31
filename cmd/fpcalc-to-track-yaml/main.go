@@ -14,7 +14,6 @@ import (
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
 	media_file_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
 	"gopkg.in/yaml.v3"
 )
 
@@ -54,7 +53,7 @@ func main() {
 		yamlData, err := os.ReadFile(trackYamlPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				log.Printf("Skipping %s (no associated track YAML)", mediaFile.Path)
+				log.Printf("Skipping %s (no associated track YAML)", *mediaFile.Path)
 				countSkipped++
 				continue
 			}
@@ -70,7 +69,7 @@ func main() {
 			continue
 		}
 		if !needsFpcalc && overwriteMode != cli.SkipExisting {
-			needsFpcalc, err = cli.ShouldOverwriteFile(trackYamlPath, mediaFile.Path, overwriteMode)
+			needsFpcalc, err = cli.ShouldOverwriteFile(trackYamlPath, *mediaFile.Path, overwriteMode)
 			if err != nil {
 				log.Printf("ERROR checking overwrite for %s: %v", trackYamlPath, err)
 				countFailed++
@@ -83,9 +82,9 @@ func main() {
 			continue
 		}
 
-		fpcalcData, err := runFpcalc(mediaFile.Path)
+		fpcalcData, err := runFpcalc(*mediaFile.Path)
 		if err != nil {
-			log.Printf("ERROR running fpcalc for %s: %v", mediaFile.Path, err)
+			log.Printf("ERROR running fpcalc for %s: %v", *mediaFile.Path, err)
 			countFailed++
 			continue
 		}
@@ -113,25 +112,25 @@ func main() {
 }
 
 func trackYamlPath(mediaFile media_file.MediaFileData) string {
-	ext := filepath.Ext(mediaFile.Path)
-	return filepath.Join(mediaFile.AlbumPath, strings.TrimSuffix(filepath.Base(mediaFile.Path), ext)+".yml")
+	ext := filepath.Ext(*mediaFile.Path)
+	return filepath.Join(mediaFile.AlbumPath, strings.TrimSuffix(filepath.Base(*mediaFile.Path), ext)+".yml")
 }
 
-func runFpcalc(mediaPath string) (track.TrackFpCalcData, error) {
+func runFpcalc(mediaPath string) (media_file.MediaFileFpCalcData, error) {
 	output, err := exec.Command("fpcalc", "-json", mediaPath).CombinedOutput()
 	if err != nil {
-		return track.TrackFpCalcData{}, fmt.Errorf("fpcalc -json failed: %w: %s", err, strings.TrimSpace(string(output)))
+		return media_file.MediaFileFpCalcData{}, fmt.Errorf("fpcalc -json failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 
 	var result fpcalcOutput
 	if err := json.Unmarshal(output, &result); err != nil {
-		return track.TrackFpCalcData{}, fmt.Errorf("parse fpcalc JSON: %w", err)
+		return media_file.MediaFileFpCalcData{}, fmt.Errorf("parse fpcalc JSON: %w", err)
 	}
 	if result.Duration == nil || result.Fingerprint == nil || *result.Fingerprint == "" {
-		return track.TrackFpCalcData{}, fmt.Errorf("fpcalc JSON is missing duration or fingerprint")
+		return media_file.MediaFileFpCalcData{}, fmt.Errorf("fpcalc JSON is missing duration or fingerprint")
 	}
 
-	return track.TrackFpCalcData{
+	return media_file.MediaFileFpCalcData{
 		Duration:    result.Duration,
 		Fingerprint: result.Fingerprint,
 	}, nil
@@ -161,7 +160,7 @@ func needsFpcalcData(data []byte) (bool, error) {
 	return true, nil
 }
 
-func updateTrackYamlFile(path string, original []byte, data track.TrackFpCalcData) (bool, error) {
+func updateTrackYamlFile(path string, original []byte, data media_file.MediaFileFpCalcData) (bool, error) {
 	if data.Duration == nil || data.Fingerprint == nil || *data.Fingerprint == "" {
 		return false, fmt.Errorf("fpcalc data must include duration and fingerprint")
 	}

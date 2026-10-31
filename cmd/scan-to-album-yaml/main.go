@@ -9,8 +9,8 @@ import (
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/album"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/date"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"gopkg.in/yaml.v3"
 )
@@ -55,10 +55,15 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData) error {
 		path := filepath.Join(m.AlbumPath, "album.yml")
 		albumYaml := album.AlbumYamlFile{
 			AlbumData: album.AlbumData{
-				Name:          m.Album,
-				DateReleased:  types.Date{Y: m.Year},
+				DateReleased:  date.Date{},
 				ExplicitCover: false,
 			},
+		}
+		if m.Album != nil {
+			albumYaml.AlbumData.Name = *m.Album
+		}
+		if m.Year != nil {
+			albumYaml.AlbumData.DateReleased.Y = *m.Year
 		}
 		data, err := yaml.Marshal(&albumYaml)
 		if err != nil {

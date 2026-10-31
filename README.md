@@ -41,16 +41,34 @@ graph TD;
 
 ## Features
 
+- [`ScanTracks`](./internal/shared/scanner/track/track_scanner.go) returns
+  `[]track.Track` from `root/artist/album/*.yml` in configured media directories.
+  It excludes `artist.yml` and `album.yml`, honors `excludePaths`, and logs and
+  skips access, read, and decode errors. Each result contains its full YAML-file
+  path and parsed `TrackYamlFile`; no matching audio file or `album.yml` is required.
+
+- [`ScanArtists`](./internal/shared/scanner/artist/artist_scanner.go) returns
+  `[]artist.Artist`, containing each `ArtistYamlFile` and its directory
+  path.
+
+- [`ScanAlbums`](./internal/shared/scanner/album/album_scanner.go) walks configured
+  media directories for `album.yml` files and returns `[]album.Album`,
+  containing each `AlbumYamlFile` and its directory path.
+  It honors case-insensitive `excludePaths`; access, read, and YAML parse errors
+  are logged and skipped. It does not infer albums from media files.
+
 - Suports reading metadata Moongas metadata file formats such as `artist.yml` and `album.yml` files
 - Output format (SQLite database) is compatible with the Moongas `mediascan` python package
 
 ## Database Schema
 
-The output database contains three tables:
+The output database contains five tables:
 
 | Table | Contents |
 | ----- | -------- |
 | mediafile | Track metadata from individual media files (ID3 tag information read from `mp3` files) |
+| track | Core metadata from track YAML files discovered by `ScanTracks`, with the same columns as `mediafile` |
+| trackstreaming | Streaming service identifiers for tracks, correlated by `trackid` |
 | artist | Metadata from `artist.yml` files |
 | album | One row per unique media-file album path, with `path`, `name`, `year`, and `explicitcover` fields |
 
@@ -59,11 +77,33 @@ Album metadata comes from `album.yml` in the album directory: `albumData.name`,
 missing, the name and year come from the first media file associated with that
 album path in scan order, and `explicitcover` defaults to `false`.
 
+The `track` table contains `id`, `path`, `albumpath`, `artistpath`, `title`,
+`artist`, `albumartist`, `album`, `genre`, and `year`. Its unique `path` is the
+track YAML-file path; album and artist paths are its parent and grandparent
+directories. Metadata comes from `trackData`, without requiring a local audio
+file. Artist and album path indexes use table-specific names.
+
+`ScanTracks` runs once. Its results populate `track` first, then
+`trackstreaming`, with one row per `trackIdData.streamingData` entry.
+The columns are `trackid` (the corresponding `track.id`, resolved by YAML-file
+path), `streamingservice`, and `streamingtrackid`. The table population uses
+only the service and streaming track ID, not the URL or API response.
+Tracks without streaming entries produce no `trackstreaming` rows.
+
 ## Usage
 
 ### Scan to Database
 
-- [`cmd/scan-to-db`](./cmd/scan-to-db) - Scans media libraries for mediafiles and moongas `artist.yml` and `album.yml` files, outputs an SQLite database (`.db`) file
+The database command's entry point is [`main.go`](./cmd/scan-to-db/main.go).
+Table creation, insertion, and display operations are grouped by table in
+[`table_mediafile.go`](./cmd/scan-to-db/table_mediafile.go),
+[`table_artist.go`](./cmd/scan-to-db/table_artist.go),
+[`table_album.go`](./cmd/scan-to-db/table_album.go),
+[`table_track.go`](./cmd/scan-to-db/table_track.go), and
+[`table_trackstreaming.go`](./cmd/scan-to-db/table_trackstreaming.go), with matching per-table
+test files.
+
+- [`cmd/scan-to-db`](./cmd/scan-to-db) - Scans media libraries for mediafiles, moongas `artist.yml` and `album.yml` files, and track YAML files; outputs an SQLite database (`.db`) file
 ```bash
 go run cmd/scan-to-db mediascan-config.yml mediascan.db
 ```
@@ -126,9 +166,11 @@ Existing flat fields are not automatically migrated.
 It may be omitted or null; the previous list form is no longer accepted.
 Fingerprints and AcoustID results
 belong to the top-level `mediaFileData` list, matching the Python project.
-Each entry uses `TrackMediaFileData`: all file metadata fields are optional,
-so fingerprint-only entries are supported. This is separate from the scanner's
-`MediaFileData` type, whose existing behavior is unchanged. AcoustID recording
+Each entry uses the shared `MediaFileData`: metadata fields are optional pointers,
+so fingerprint-only entries are supported. Duration is a floating-point value.
+The scanner retains directory paths and modification timestamps and populates
+metadata pointers, including explicit zero values when tags are unavailable.
+AcoustID recording
 metadata supports optional title, length (milliseconds), video, disambiguation,
 first release date, and ISRCs. Legacy fingerprints under `trackIdData` are not
 automatically migrated.
@@ -151,24 +193,6 @@ and optional fields may be omitted.
 
 ```bash
 go run ./cmd/fpcalc-to-track-yaml mediascan-config.yml [media-root]
-```
-
-### Scan to YAML (deprecated)
-
-These commands scan media files and `artist.yml` files and output massive combined YAML (.yml) files. This was the original implementation before switching to sqlite. These may be removed in the future.
-
-- [`cmd/scan-to-files-yaml`](./cmd/scan-to-files-yaml-yaml) - Recursively scan a directory for media files, extract metadata (including ID3v2 tags from both MP3 and M4A files), and save the output in a mediafiles YAML file (`files.yml`). 
-- Reads configuration from YAML file e.g. [mediascan-config.yml](./mediascan-config.yml)
-- Has only two required command-line arguments: `<config-yaml-filepath>` and `<output-yaml-filepath>`
-- Created specifically to run fast on a Raspberry Pi single-board computer as part of another project of mine.
-- Usage:
-```bash
-go run cmd/scan-to-files-yaml mediascan-config.yml files.yml
-```
-- [`cmd/scan-to-artists-yaml`](./cmd/scan-to-artists-yaml) - Scans artist directories for `artist.yml` files and aggregates them into a combined artists YAML file (`artists.yml`).
-- Usage:
-```bash
-go run cmd/scan-to-artists-yaml mediascan-config.yml artists.yml
 ```
 
 ## mediascan YAML Configuration file Reference
@@ -197,7 +221,7 @@ go build ./cmd/scan-to-db
 ```
 
 ### Dependencies
-- [gopkg.in/yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) (Used for generating files.yml)
+- [gopkg.in/yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) (Used for reading and writing configuration and metadata YAML)
 - [dhowden/tag](https://github.com/dhowden/tag) (Used for reading ID3 tags)
     - `dhowden/tag` is a nice little Go library for ID3, MP4 and OGG/FLAC metadata parsing. I added support for [genre codes in the 148-191 range](https://en.wikipedia.org/wiki/List_of_ID3v1_genres#Extension_by_Winamp) and David was kind enough to merge my [PR](https://github.com/dhowden/tag/pull/103).
 - [tcolgate/mp3](https://github.com/tcolgate/mp3) (Used for calculating MP3 duration)
@@ -229,26 +253,6 @@ real	0m3.637s
 user	0m2.410s
 sys	0m1.299s
 
-```
-
-## Performance Demo 2 - Raspberry Pi 4 model B
-```bash
-$ time go run cmd/ scan-to-files-yaml-yaml mediascan-config.yml files.yml
-2022/07/04 15:06:39 Successfully loaded 8376 media files
-
-real	0m18.652s
-user	0m8.251s
-sys	0m11.406s
-```
-
-## Performance Demo 3 - Raspberry Pi Zero 2W
-```bash
-$ time go run cmd/ scan-to-files-yaml-yaml mediascan-config.yml files.yml
-2022/07/04 15:21:14 Successfully loaded 8376 media files
-
-real	1m18.217s
-user	0m18.136s
-sys	0m14.305s
 ```
 
 ## Installing Dependencies
@@ -320,14 +324,9 @@ Edit [mediascan-config.yml](mediascan-config.yml) and set the `mediadir` to the 
 
 Now you should be all set to run mediascan.
 
-You can run it from the mediascan directory like this:
+You can run the database scanner from the repository directory like this:
 ```bash
-go run cmd/ scan-to-files-yaml-yaml mediascan-config.yml files.yml
-```
-
-Or you can run it from any directory like this:
-```bash
-go run github.com/moongas-org/moongas-mediascan-go mediascan-config.yml files.yml
+go run ./cmd/scan-to-db mediascan-config.yml mediascan.db
 ```
 
 Happy scanning!
