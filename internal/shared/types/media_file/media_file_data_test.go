@@ -31,7 +31,7 @@ func TestMediaFileDataRoundTrip(t *testing.T) {
 					},
 				},
 				{
-					Path: utils.Pointer("song.mp3"), AlbumPath: "/music/Artist/Album", ArtistPath: "/music/Artist",
+					Path: utils.Pointer("song.mp3"),
 					Size: utils.Pointer(int64(0)), Format: utils.Pointer(""), Title: utils.Pointer(""),
 					Artist: utils.Pointer("Artist"), AlbumArtist: utils.Pointer("Album Artist"),
 					Album: utils.Pointer("Album"), Genre: utils.Pointer("Rock"), Year: utils.Pointer(0),

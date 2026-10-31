@@ -113,7 +113,7 @@ func main() {
 
 func trackYamlPath(mediaFile media_file.MediaFileData) string {
 	ext := filepath.Ext(*mediaFile.Path)
-	return filepath.Join(mediaFile.AlbumPath, strings.TrimSuffix(filepath.Base(*mediaFile.Path), ext)+".yml")
+	return filepath.Join(filepath.Dir(*mediaFile.Path), strings.TrimSuffix(filepath.Base(*mediaFile.Path), ext)+".yml")
 }
 
 func runFpcalc(mediaPath string) (media_file.MediaFileFpCalcData, error) {

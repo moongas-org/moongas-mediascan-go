@@ -42,7 +42,7 @@ func main() {
 	countSkipped := 0
 	for _, m := range files {
 		ext := filepath.Ext(*m.Path)
-		trackYamlFilepath := filepath.Join(m.AlbumPath, strings.TrimSuffix(filepath.Base(*m.Path), ext)+".yml")
+		trackYamlFilepath := filepath.Join(filepath.Dir(*m.Path), strings.TrimSuffix(filepath.Base(*m.Path), ext)+".yml")
 		if _, err := os.Stat(trackYamlFilepath); err == nil {
 			shouldOverwrite, err := cli.ShouldOverwriteFile(trackYamlFilepath, *m.Path, overwriteMode)
 			if err != nil {

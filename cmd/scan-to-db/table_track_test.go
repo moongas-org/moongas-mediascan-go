@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -46,8 +45,17 @@ func TestTrackTableSchemaMatchesMediaFile(t *testing.T) {
 		}
 		return result
 	}
-	if got, want := columns("track"), columns("mediafile"); !reflect.DeepEqual(got, want) {
-		t.Errorf("track columns = %+v, mediafile columns = %+v", got, want)
+	trackColumns, mediaColumns := columns("track"), columns("mediafile")
+	if len(trackColumns) != 12 || len(mediaColumns) != 13 {
+		t.Fatalf("unexpected schema sizes: track=%d mediafile=%d", len(trackColumns), len(mediaColumns))
+	}
+	for i, c := range trackColumns {
+		if c != mediaColumns[i] {
+			t.Errorf("track column %+v differs from mediafile column %+v", c, mediaColumns[i])
+		}
+	}
+	if trackColumns[10].Name != "artistid" || trackColumns[11].Name != "albumid" || mediaColumns[12].Name != "trackid" {
+		t.Fatal("missing relationship columns")
 	}
 	for _, index := range []string{"idx_track_artistpath", "idx_track_albumpath"} {
 		var count int
@@ -63,6 +71,10 @@ func TestTrackTableSchemaMatchesMediaFile(t *testing.T) {
 
 func TestInsertScannedTracks(t *testing.T) {
 	db := newTestDB(t)
+	createTableArtist(db)
+	if err := createTableAlbum(db); err != nil {
+		t.Fatal(err)
+	}
 	if err := createTableTrack(db); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +104,7 @@ func TestInsertScannedTracks(t *testing.T) {
 	}
 	var id, year int
 	var gotPath, albumPath, artistPath, title, artist, albumArtist, album, genre string
-	if err := db.QueryRow("SELECT * FROM track").
+	if err := db.QueryRow("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year FROM track").
 		Scan(&id, &gotPath, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year); err != nil {
 		t.Fatal(err)
 	}
@@ -111,6 +123,10 @@ func TestInsertScannedTracks(t *testing.T) {
 
 func TestTrackTableEmptyAndErrors(t *testing.T) {
 	db := newTestDB(t)
+	createTableArtist(db)
+	if err := createTableAlbum(db); err != nil {
+		t.Fatal(err)
+	}
 	if err := createTableTrack(db); err != nil {
 		t.Fatal(err)
 	}

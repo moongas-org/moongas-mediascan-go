@@ -21,6 +21,15 @@ func TestRunFpcalcOutputParsing(t *testing.T) {
 	}
 }
 
+func TestTrackYamlPathUsesMediaFileDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "Artist", "Album", "song.mp3")
+	got := trackYamlPath(media_file.MediaFileData{Path: &path})
+	want := filepath.Join(filepath.Dir(path), "song.yml")
+	if got != want {
+		t.Fatalf("track YAML path = %q, want %q", got, want)
+	}
+}
+
 func TestNeedsFpcalcData(t *testing.T) {
 	for _, tt := range []struct {
 		name string

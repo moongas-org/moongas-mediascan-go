@@ -15,15 +15,15 @@ import (
 func TestWriteAlbumYamlFiles(t *testing.T) {
 	first, second := t.TempDir(), t.TempDir()
 	files := []media_file.MediaFileData{
-		{AlbumPath: first, Album: utils.Pointer("First album"), Year: utils.Pointer(1993)},
-		{AlbumPath: second, Album: utils.Pointer("Other album"), Year: utils.Pointer(2000)},
-		{AlbumPath: first, Album: utils.Pointer("Later tags"), Year: utils.Pointer(2020)},
+		{Path: utils.Pointer(filepath.Join(first, "first.mp3")), Album: utils.Pointer("First album"), Year: utils.Pointer(1993)},
+		{Path: utils.Pointer(filepath.Join(second, "other.mp3")), Album: utils.Pointer("Other album"), Year: utils.Pointer(2000)},
+		{Path: utils.Pointer(filepath.Join(first, "later.mp3")), Album: utils.Pointer("Later tags"), Year: utils.Pointer(2020)},
 	}
 	if err := writeAlbumYamlFiles(files); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range files[:2] {
-		path := filepath.Join(m.AlbumPath, "album.yml")
+		path := filepath.Join(filepath.Dir(*m.Path), "album.yml")
 		data, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
@@ -61,7 +61,7 @@ func TestWriteAlbumYamlFilesPreservesExisting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			files := []media_file.MediaFileData{{AlbumPath: dir, Album: utils.Pointer("Replacement"), Year: utils.Pointer(2020)}}
+			files := []media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3")), Album: utils.Pointer("Replacement"), Year: utils.Pointer(2020)}}
 			if err := writeAlbumYamlFiles(files); err != nil {
 				t.Fatal(err)
 			}
@@ -87,7 +87,7 @@ func TestWriteAlbumYamlFilesPreservesDanglingSymlink(t *testing.T) {
 	if err := os.Symlink(target, path); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeAlbumYamlFiles([]media_file.MediaFileData{{AlbumPath: dir}}); err != nil {
+	if err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3"))}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -103,8 +103,17 @@ func TestWriteAlbumYamlFilesEmpty(t *testing.T) {
 
 func TestWriteAlbumYamlFilesReportsCreateError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "missing")
-	err := writeAlbumYamlFiles([]media_file.MediaFileData{{AlbumPath: dir}})
+	err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3"))}})
 	if err == nil || !strings.Contains(err.Error(), filepath.Join(dir, "album.yml")) {
 		t.Fatalf("expected create error with album.yml path, got %v", err)
+	}
+}
+
+func TestWriteAlbumYamlFilesRejectsMissingPath(t *testing.T) {
+	for _, path := range []*string{nil, utils.Pointer("")} {
+		err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: path}})
+		if err == nil || !strings.Contains(err.Error(), "missing a path") {
+			t.Fatalf("expected missing path error, got %v", err)
+		}
 	}
 }

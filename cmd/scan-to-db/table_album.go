@@ -2,16 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/album"
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/date"
-	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
-	"gopkg.in/yaml.v3"
 )
 
 func createTableAlbum(db *sql.DB) error {
@@ -21,7 +16,8 @@ func createTableAlbum(db *sql.DB) error {
 		"path" TEXT UNIQUE,
 		"name" TEXT,
 		"year" INTEGER,
-		"explicitcover" BOOLEAN
+		"explicitcover" BOOLEAN,
+		"artistid" INTEGER REFERENCES artist(id)
 	  );`)
 	if err != nil {
 		return fmt.Errorf("create album table: %w", err)
@@ -30,47 +26,36 @@ func createTableAlbum(db *sql.DB) error {
 	return nil
 }
 
-func insertAlbums(db *sql.DB, files []media_file.MediaFileData) error {
+func insertAlbums(db *sql.DB, albums []album.Album) error {
 	seen := make(map[string]bool)
-	for _, mf := range files {
-		if seen[mf.AlbumPath] {
+	for i, a := range albums {
+		if a.Path == "" {
+			return fmt.Errorf("album %d is missing a path", i)
+		}
+		albumPath := a.Path
+		if seen[albumPath] {
 			continue
 		}
 
-		albumData := album.AlbumData{
-			DateReleased: date.Date{},
-		}
-		if mf.Album != nil {
-			albumData.Name = *mf.Album
-		}
-		if mf.Year != nil {
-			albumData.DateReleased.Y = *mf.Year
-		}
-		path := filepath.Join(mf.AlbumPath, "album.yml")
-		data, err := os.ReadFile(path)
-		if err == nil {
-			var file album.AlbumYamlFile
-			if err := yaml.Unmarshal(data, &file); err != nil {
-				return fmt.Errorf("parse %s: %w", path, err)
-			}
-			albumData = file.AlbumData
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("read %s: %w", path, err)
+		albumData := a.AlbumYamlFile.AlbumData
+		artistID, err := rowIDByPath(db, "artist", filepath.Dir(albumPath))
+		if err != nil {
+			return err
 		}
 
 		log.Println("Inserting album record ...")
-		_, err = db.Exec(`INSERT INTO album(path, name, year, explicitcover) VALUES (?, ?, ?, ?)`,
-			mf.AlbumPath, albumData.Name, albumData.DateReleased.Y, albumData.ExplicitCover)
+		_, err = db.Exec(`INSERT INTO album(path, name, year, explicitcover, artistid) VALUES (?, ?, ?, ?, ?)`,
+			albumPath, albumData.Name, albumData.DateReleased.Y, albumData.ExplicitCover, artistID)
 		if err != nil {
-			return fmt.Errorf("insert album %s: %w", mf.AlbumPath, err)
+			return fmt.Errorf("insert album %s: %w", albumPath, err)
 		}
-		seen[mf.AlbumPath] = true
+		seen[albumPath] = true
 	}
 	return nil
 }
 
 func displayAlbums(db *sql.DB) {
-	rows, err := db.Query("SELECT id, path, name, year, explicitcover FROM album ORDER BY name")
+	rows, err := db.Query("SELECT id, path, name, year, explicitcover, artistid FROM album ORDER BY name")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -80,10 +65,11 @@ func displayAlbums(db *sql.DB) {
 		var path, name string
 		var year int
 		var explicitcover bool
-		if err := rows.Scan(&id, &path, &name, &year, &explicitcover); err != nil {
+		var artistID sql.NullInt64
+		if err := rows.Scan(&id, &path, &name, &year, &explicitcover, &artistID); err != nil {
 			log.Fatal(err)
 		}
-		log.Println("album: ", id, " ", path, " ", name, " ", year, " ", explicitcover)
+		log.Println("album: ", id, " ", path, " ", name, " ", year, " ", explicitcover, " artistid=", artistID)
 	}
 	if err := rows.Err(); err != nil {
 		log.Fatal(err)

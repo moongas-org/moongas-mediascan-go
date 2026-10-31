@@ -129,11 +129,8 @@ func TestScanFiles_PopulatesPathDerivedMetadata(t *testing.T) {
 		t.Fatalf("expected 1 media file, got %d", len(files))
 	}
 	m := files[0]
-	if m.AlbumPath != albumDir {
-		t.Errorf("got album path %q, want %q", m.AlbumPath, albumDir)
-	}
-	if want := filepath.Join(root, "Artist"); m.ArtistPath != want {
-		t.Errorf("got artist path %q, want %q", m.ArtistPath, want)
+	if m.Path == nil || *m.Path != trackPath {
+		t.Errorf("got media-file path %v, want %q", m.Path, trackPath)
 	}
 	if m.Size == nil || *m.Size != int64(len(content)) {
 		t.Errorf("got size %v, want %d", m.Size, len(content))

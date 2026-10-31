@@ -67,18 +67,17 @@ The output database contains five tables:
 | Table | Contents |
 | ----- | -------- |
 | mediafile | Track metadata from individual media files (ID3 tag information read from `mp3` files) |
-| track | Core metadata from track YAML files discovered by `ScanTracks`, with the same columns as `mediafile` |
+| track | Core metadata from track YAML files discovered by `ScanTracks`, linked by `artistid` and `albumid` |
 | trackstreaming | Streaming service identifiers for tracks, correlated by `trackid` |
 | artist | Metadata from `artist.yml` files |
-| album | One row per unique media-file album path, with `path`, `name`, `year`, and `explicitcover` fields |
+| album | Metadata from `album.yml` files, linked to artists by `artistid` |
 
 Album metadata comes from `album.yml` in the album directory: `albumData.name`,
-`albumData.dateReleased.y`, and `albumData.explicitCover`. If the file is
-missing, the name and year come from the first media file associated with that
-album path in scan order, and `explicitcover` defaults to `false`.
+`albumData.dateReleased.y`, and `albumData.explicitCover`. `ScanAlbums` supplies
+these rows; directories without `album.yml` do not produce album rows.
 
 The `track` table contains `id`, `path`, `albumpath`, `artistpath`, `title`,
-`artist`, `albumartist`, `album`, `genre`, and `year`. Its unique `path` is the
+`artist`, `albumartist`, `album`, `genre`, `year`, `artistid`, and `albumid`. Its unique `path` is the
 track YAML-file path; album and artist paths are its parent and grandparent
 directories. Metadata comes from `trackData`, without requiring a local audio
 file. Artist and album path indexes use table-specific names.
@@ -89,6 +88,17 @@ The columns are `trackid` (the corresponding `track.id`, resolved by YAML-file
 path), `streamingservice`, and `streamingtrackid`. The table population uses
 only the service and streaming track ID, not the URL or API response.
 Tracks without streaming entries produce no `trackstreaming` rows.
+
+Scanning and insertion run in order: artist, album, track, trackstreaming,
+media files. Album and artist IDs are resolved by directory path, not metadata
+names or scan positions. `mediafile` also contains `artistid`, `albumid`, and
+`trackid`. Media files are still scanned with `ScanFiles`; their track IDs are
+matched through `TrackYamlFile.mediaFileData` paths. Relative paths in that list
+are resolved against the containing track YAML directory; absolute paths are
+used directly. Multiple media files may reference the same track.
+Missing relationships are stored as `NULL` with a warning. Pathless entries
+(such as fingerprint-only metadata) cannot establish a media-file relationship.
+If two tracks claim the same media-file path, database generation fails explicitly.
 
 ## Usage
 
@@ -168,8 +178,10 @@ Fingerprints and AcoustID results
 belong to the top-level `mediaFileData` list, matching the Python project.
 Each entry uses the shared `MediaFileData`: metadata fields are optional pointers,
 so fingerprint-only entries are supported. Duration is a floating-point value.
-The scanner retains directory paths and modification timestamps and populates
+The scanner retains media-file paths and modification timestamps and populates
 metadata pointers, including explicit zero values when tags are unavailable.
+Album and artist directories are derived from the media-file path's parent and
+grandparent directories rather than stored in `MediaFileData`.
 AcoustID recording
 metadata supports optional title, length (milliseconds), video, disambiguation,
 first release date, and ISRCs. Legacy fingerprints under `trackIdData` are not

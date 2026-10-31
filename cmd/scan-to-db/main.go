@@ -15,9 +15,11 @@ import (
 	_ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
+	album_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/album"
 	artist_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/artist"
 	media_file_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
 	track_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/track"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/conf"
 )
 
 func main() {
@@ -59,10 +61,6 @@ func main() {
 		}
 	}
 
-	var files = media_file_scanner.ScanFiles(conf)
-	var artists = artist_scanner.ScanArtists(conf)
-	tracks := track_scanner.ScanTracks(conf)
-
 	os.Remove(outputDBFilepath)
 
 	log.Printf("Creating %s...", outputDBFilepath)
@@ -75,41 +73,11 @@ func main() {
 
 	sqliteDatabase, _ := sql.Open("sqlite3", outputDBFilepath)
 	defer sqliteDatabase.Close()
-	createTableMediaFile(sqliteDatabase)
-	createTableArtist(sqliteDatabase)
-	if err := createTableAlbum(sqliteDatabase); err != nil {
-		log.Fatal(err)
-	}
-	if err := createTableTrack(sqliteDatabase); err != nil {
-		log.Fatal(err)
-	}
-	if err := createTableTrackStreaming(sqliteDatabase); err != nil {
-		log.Fatal(err)
-	}
-
-	for i := 0; i < len(files); i++ {
-		mf := files[i]
-		insertMediaFile(sqliteDatabase, *mf.Path, mf.AlbumPath, mf.ArtistPath, *mf.Title, *mf.Artist, *mf.AlbumArtist, *mf.Album, *mf.Genre, *mf.Year)
-	}
-
-	for i := 0; i < len(artists); i++ {
-		a := artists[i]
-		data := a.ArtistYamlFile.ArtistData
-		insertArtist(sqliteDatabase, a.Path, data.ArtistNames[0], data.City, data.CountryCode, data.RegionCode, data.LanguageCodes[0])
-	}
-
-	if err := insertAlbums(sqliteDatabase, files); err != nil {
-		log.Fatal(err)
-	}
-	if err := insertTracks(sqliteDatabase, tracks); err != nil {
-		log.Fatal(err)
-	}
-	if err := insertTrackStreaming(sqliteDatabase, tracks); err != nil {
+	if err := scanIntoDB(sqliteDatabase, conf); err != nil {
 		log.Fatal(err)
 	}
 
 	// DISPLAY INSERTED RECORDS
-	displayMediaFiles(sqliteDatabase)
 	displayArtists(sqliteDatabase)
 	displayAlbums(sqliteDatabase)
 	if err := displayTracks(sqliteDatabase); err != nil {
@@ -118,6 +86,42 @@ func main() {
 	if err := displayTrackStreaming(sqliteDatabase); err != nil {
 		log.Fatal(err)
 	}
+	displayMediaFiles(sqliteDatabase)
 
 	log.Printf("Written to file %s", outputDBAbsFilepath)
+}
+
+func scanIntoDB(sqliteDatabase *sql.DB, conf conf.MediascanConf) error {
+	createTableArtist(sqliteDatabase)
+	if err := createTableAlbum(sqliteDatabase); err != nil {
+		return err
+	}
+	if err := createTableTrack(sqliteDatabase); err != nil {
+		return err
+	}
+	if err := createTableTrackStreaming(sqliteDatabase); err != nil {
+		return err
+	}
+	createTableMediaFile(sqliteDatabase)
+
+	artists := artist_scanner.ScanArtists(conf)
+	for i := 0; i < len(artists); i++ {
+		a := artists[i]
+		data := a.ArtistYamlFile.ArtistData
+		insertArtist(sqliteDatabase, a.Path, data.ArtistNames[0], data.City, data.CountryCode, data.RegionCode, data.LanguageCodes[0])
+	}
+
+	albums := album_scanner.ScanAlbums(conf)
+	if err := insertAlbums(sqliteDatabase, albums); err != nil {
+		return err
+	}
+	tracks := track_scanner.ScanTracks(conf)
+	if err := insertTracks(sqliteDatabase, tracks); err != nil {
+		return err
+	}
+	if err := insertTrackStreaming(sqliteDatabase, tracks); err != nil {
+		return err
+	}
+	files := media_file_scanner.ScanFiles(conf)
+	return insertMediaFiles(sqliteDatabase, files, tracks)
 }

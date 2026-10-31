@@ -9,8 +9,6 @@ import (
 // MediaFileData permits partial entries containing only fingerprints or API results.
 type MediaFileData struct {
 	Path         *string                `yaml:"path,omitempty" json:"path,omitempty"`
-	AlbumPath    string                 `yaml:"albumPath,omitempty" json:"albumPath,omitempty"`
-	ArtistPath   string                 `yaml:"artistPath,omitempty" json:"artistPath,omitempty"`
 	Size         *int64                 `yaml:"size,omitempty" json:"size,omitempty"`
 	Format       *string                `yaml:"format,omitempty" json:"format,omitempty"`
 	Title        *string                `yaml:"title,omitempty" json:"title,omitempty"`

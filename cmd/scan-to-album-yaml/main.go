@@ -46,13 +46,17 @@ func main() {
 func writeAlbumYamlFiles(files []media_file.MediaFileData) error {
 	seen := make(map[string]bool)
 	countCreated, countSkipped := 0, 0
-	for _, m := range files {
-		if seen[m.AlbumPath] {
+	for i, m := range files {
+		if m.Path == nil || *m.Path == "" {
+			return fmt.Errorf("media file %d is missing a path", i)
+		}
+		albumPath := filepath.Dir(*m.Path)
+		if seen[albumPath] {
 			continue
 		}
-		seen[m.AlbumPath] = true
+		seen[albumPath] = true
 
-		path := filepath.Join(m.AlbumPath, "album.yml")
+		path := filepath.Join(albumPath, "album.yml")
 		albumYaml := album.AlbumYamlFile{
 			AlbumData: album.AlbumData{
 				DateReleased:  date.Date{},

@@ -15,6 +15,10 @@ import (
 
 func TestInsertTrackStreamingCorrelatesTrackIDs(t *testing.T) {
 	db := newTestDB(t)
+	createTableArtist(db)
+	if err := createTableAlbum(db); err != nil {
+		t.Fatal(err)
+	}
 	if err := createTableTrack(db); err != nil {
 		t.Fatal(err)
 	}
@@ -91,6 +95,10 @@ func TestInsertTrackStreamingCorrelatesTrackIDs(t *testing.T) {
 
 func TestInsertTrackStreamingFromSingleScan(t *testing.T) {
 	db := newTestDB(t)
+	createTableArtist(db)
+	if err := createTableAlbum(db); err != nil {
+		t.Fatal(err)
+	}
 	if err := createTableTrack(db); err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +154,10 @@ trackIdData:
 
 func TestTrackStreamingEmptyAndErrors(t *testing.T) {
 	db := newTestDB(t)
+	createTableArtist(db)
+	if err := createTableAlbum(db); err != nil {
+		t.Fatal(err)
+	}
 	if err := createTableTrack(db); err != nil {
 		t.Fatal(err)
 	}

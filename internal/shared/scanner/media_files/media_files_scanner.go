@@ -72,11 +72,7 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 				}
 
 				var m media_file.MediaFileData
-				m.Path = utils.Pointer(path)                   // path to media file
-				var albumDirPath = filepath.Dir(path)          // path to album dir
-				var artistDirPath = filepath.Dir(albumDirPath) // path to artist dir
-				m.AlbumPath = albumDirPath
-				m.ArtistPath = artistDirPath
+				m.Path = utils.Pointer(path)
 				m.Size = utils.Pointer(info.Size())
 				m.ModTime = utils.Pointer(info.ModTime())
 				m.Duration = utils.Pointer(0.0)

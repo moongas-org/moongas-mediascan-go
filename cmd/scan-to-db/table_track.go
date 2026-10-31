@@ -21,7 +21,9 @@ func createTableTrack(db *sql.DB) error {
 		"albumartist" TEXT,
 		"album" TEXT,
 		"genre" TEXT,
-		"year" INTEGER
+		"year" INTEGER,
+		"artistid" INTEGER REFERENCES artist(id),
+		"albumid" INTEGER REFERENCES album(id)
 	  );`)
 	if err != nil {
 		return fmt.Errorf("create track table: %w", err)
@@ -42,11 +44,19 @@ func insertTracks(db *sql.DB, tracks []track.Track) error {
 	for _, t := range tracks {
 		data := t.TrackYamlFile.TrackData
 		albumPath := filepath.Dir(t.Path)
+		artistID, err := rowIDByPath(db, "artist", filepath.Dir(albumPath))
+		if err != nil {
+			return err
+		}
+		albumID, err := rowIDByPath(db, "album", albumPath)
+		if err != nil {
+			return err
+		}
 		log.Println("Inserting track record ...")
-		_, err := db.Exec(`INSERT INTO track(path, albumpath, artistpath, title, artist, albumartist, album, genre, year)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		_, err = db.Exec(`INSERT INTO track(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			t.Path, albumPath, filepath.Dir(albumPath), data.Title, data.Artist,
-			data.AlbumArtist, data.Album, data.Genre, data.Year)
+			data.AlbumArtist, data.Album, data.Genre, data.Year, artistID, albumID)
 		if err != nil {
 			return fmt.Errorf("insert track %s: %w", t.Path, err)
 		}
@@ -55,18 +65,19 @@ func insertTracks(db *sql.DB, tracks []track.Track) error {
 }
 
 func displayTracks(db *sql.DB) error {
-	rows, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year FROM track ORDER BY artist")
+	rows, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid FROM track ORDER BY artist")
 	if err != nil {
 		return fmt.Errorf("query tracks: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var id, year int
+		var artistID, albumID sql.NullInt64
 		var path, albumPath, artistPath, title, artist, albumArtist, album, genre string
-		if err := rows.Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year); err != nil {
+		if err := rows.Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year, &artistID, &albumID); err != nil {
 			return fmt.Errorf("scan track row: %w", err)
 		}
-		log.Println("track: ", id, " ", path, " ", albumPath, " ", artistPath, " ", title, " ", artist, " ", albumArtist, " ", album, " ", genre, " ", year)
+		log.Println("track: ", id, " ", path, " ", albumPath, " ", artistPath, " ", title, " ", artist, " ", albumArtist, " ", album, " ", genre, " ", year, " artistid=", artistID, " albumid=", albumID)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read tracks: %w", err)
