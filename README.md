@@ -182,6 +182,10 @@ The scanner retains media-file paths and modification timestamps and populates
 metadata pointers, including explicit zero values when tags are unavailable.
 Album and artist directories are derived from the media-file path's parent and
 grandparent directories rather than stored in `MediaFileData`.
+YAML `modTime` accepts standard timestamps and Python's space-separated datetime
+format with a timezone offset (for example, `2024-09-16 00:34:15.638511+00:00`).
+Invalid timestamps are reported as decode errors and cause the track scanner to
+skip the YAML file, so its media-file paths cannot establish track relationships.
 AcoustID recording
 metadata supports optional title, length (milliseconds), video, disambiguation,
 first release date, and ISRCs. Legacy fingerprints under `trackIdData` are not

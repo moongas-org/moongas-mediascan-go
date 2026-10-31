@@ -71,6 +71,7 @@ trackIdData:
     apiData: null
 mediaFileData:
   - path: different-name.mp3
+    modTime: 2024-09-16 00:34:15.638511+00:00
   - path: `+flacPath+`
 `)
 	write(mp3Path, "unreadable audio tags")

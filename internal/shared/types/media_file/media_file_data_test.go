@@ -42,6 +42,7 @@ func TestMediaFileDataRoundTrip(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+
 				var got MediaFileData
 				if err := codec.unmarshal(out, &got); err != nil {
 					t.Fatal(err)
@@ -68,5 +69,40 @@ func TestMediaFileDataRoundTrip(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMediaFileDataPythonModTime(t *testing.T) {
+	for _, input := range []string{
+		"2024-09-16 00:34:15.638511+00:00",
+		"'2024-09-16 00:34:15.638511+00:00'",
+		"2024-09-16 02:34:15.638511+02:00",
+		"2024-09-16T00:34:15.638511Z",
+	} {
+		t.Run(input, func(t *testing.T) {
+			var got MediaFileData
+			if err := yaml.Unmarshal([]byte("modTime: "+input+"\n"), &got); err != nil {
+				t.Fatal(err)
+			}
+			want := time.Date(2024, 9, 16, 0, 34, 15, 638511000, time.UTC)
+			if got.ModTime == nil || !got.ModTime.Equal(want) {
+				t.Fatalf("modTime = %v, want %v", got.ModTime, want)
+			}
+		})
+	}
+}
+
+func TestMediaFileDataModTimeNullAndInvalid(t *testing.T) {
+	var got MediaFileData
+	if err := yaml.Unmarshal([]byte("modTime: null\n"), &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ModTime != nil {
+		t.Fatal("null modTime must remain nil")
+	}
+	for _, input := range []string{"not-a-date", "2024-99-16 00:34:15+00:00"} {
+		if err := yaml.Unmarshal([]byte("modTime: "+input+"\n"), &got); err == nil {
+			t.Fatalf("expected error for invalid modTime %q", input)
+		}
 	}
 }
