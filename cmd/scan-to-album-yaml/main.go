@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
@@ -44,12 +45,20 @@ func main() {
 }
 
 func writeAlbumYamlFiles(files []media_file.MediaFileData) error {
-	seen := make(map[string]bool)
-	countCreated, countSkipped := 0, 0
+	genres := make(map[string][]string)
 	for i, m := range files {
 		if m.Path == nil || *m.Path == "" {
 			return fmt.Errorf("media file %d is missing a path", i)
 		}
+		albumPath := filepath.Dir(*m.Path)
+		if m.Genre != nil && *m.Genre != "" && !slices.Contains(genres[albumPath], *m.Genre) {
+			genres[albumPath] = append(genres[albumPath], *m.Genre)
+		}
+	}
+
+	seen := make(map[string]bool)
+	countCreated, countSkipped := 0, 0
+	for _, m := range files {
 		albumPath := filepath.Dir(*m.Path)
 		if seen[albumPath] {
 			continue
@@ -59,6 +68,7 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData) error {
 		path := filepath.Join(albumPath, "album.yml")
 		albumYaml := album.AlbumYamlFile{
 			AlbumData: album.AlbumData{
+				Genres:        genres[albumPath],
 				DateReleased:  date.Date{},
 				ExplicitCover: false,
 			},

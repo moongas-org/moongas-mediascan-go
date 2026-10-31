@@ -6,6 +6,7 @@ import "github.com/moongas-org/moongas-mediascan-go/internal/shared/types/date"
 // AlbumData contains the contents of the album_data block of an album.yml file.
 type AlbumData struct {
 	Name          string    `yaml:"name"`
+	Genres        []string  `yaml:"genres,omitempty"`
 	DateReleased  date.Date `yaml:"dateReleased"`
 	ExplicitCover bool      `yaml:"explicitCover"`
 }

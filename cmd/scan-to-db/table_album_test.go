@@ -29,6 +29,7 @@ func TestInsertAlbums(t *testing.T) {
 	albums := []album.Album{
 		{Path: path, AlbumYamlFile: album.AlbumYamlFile{AlbumData: album.AlbumData{
 			Name: "YAML album", DateReleased: date.Date{Y: 1993}, ExplicitCover: true,
+			Genres: []string{"Zydeco", "Rock"},
 		}}},
 		{Path: path},
 		{Path: filepath.Join(artistPath, "Second")},
@@ -36,15 +37,24 @@ func TestInsertAlbums(t *testing.T) {
 	if err := insertAlbums(db, albums); err != nil {
 		t.Fatal(err)
 	}
-	var name string
+	var name, genre string
 	var year, artistID, count int
 	var explicit bool
-	if err := db.QueryRow("SELECT name, year, explicitcover, artistid FROM album WHERE path = ?", path).
-		Scan(&name, &year, &explicit, &artistID); err != nil {
+	if err := db.QueryRow("SELECT name, year, explicitcover, artistid, genre FROM album WHERE path = ?", path).
+		Scan(&name, &year, &explicit, &artistID, &genre); err != nil {
 		t.Fatal(err)
 	}
 	if name != "YAML album" || year != 1993 || !explicit || artistID != 2 {
 		t.Fatalf("unexpected album: %s %d %t artistid=%d", name, year, explicit, artistID)
+	}
+	if genre != "Zydeco" {
+		t.Fatalf("genre = %q, want first genre Zydeco", genre)
+	}
+	if err := db.QueryRow("SELECT genre FROM album WHERE path = ?", filepath.Join(artistPath, "Second")).Scan(&genre); err != nil {
+		t.Fatal(err)
+	}
+	if genre != "" {
+		t.Fatalf("genre = %q, want empty string for absent genres", genre)
 	}
 	if err := db.QueryRow("SELECT COUNT(*) FROM album").Scan(&count); err != nil {
 		t.Fatal(err)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/album"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/utils"
 	"gopkg.in/yaml.v3"
@@ -114,6 +115,40 @@ func TestWriteAlbumYamlFilesRejectsMissingPath(t *testing.T) {
 		err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: path}})
 		if err == nil || !strings.Contains(err.Error(), "missing a path") {
 			t.Fatalf("expected missing path error, got %v", err)
+		}
+	}
+
+}
+
+func TestWriteAlbumYamlFilesCollectsUniqueGenres(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	files := []media_file.MediaFileData{
+		{Path: utils.Pointer(filepath.Join(first, "01.mp3")), Genre: utils.Pointer("Rock")},
+		{Path: utils.Pointer(filepath.Join(second, "01.mp3")), Genre: utils.Pointer("Jazz")},
+		{Path: utils.Pointer(filepath.Join(first, "02.mp3")), Genre: utils.Pointer("Zydeco")},
+		{Path: utils.Pointer(filepath.Join(first, "03.mp3")), Genre: utils.Pointer("Rock")},
+		{Path: utils.Pointer(filepath.Join(first, "04.mp3")), Genre: utils.Pointer("")},
+		{Path: utils.Pointer(filepath.Join(first, "05.mp3"))},
+		{Path: utils.Pointer(filepath.Join(first, "06.mp3")), Genre: utils.Pointer("rock")},
+		{Path: utils.Pointer(filepath.Join(second, "02.mp3")), Genre: utils.Pointer("Jazz")},
+	}
+	if err := writeAlbumYamlFiles(files); err != nil {
+		t.Fatal(err)
+	}
+	for dir, want := range map[string][]string{
+		first:  {"Rock", "Zydeco", "rock"},
+		second: {"Jazz"},
+	} {
+		data, err := os.ReadFile(filepath.Join(dir, "album.yml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got album.AlbumYamlFile
+		if err := yaml.Unmarshal(data, &got); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got.AlbumData.Genres, want) {
+			t.Errorf("genres for %s = %v, want %v", dir, got.AlbumData.Genres, want)
 		}
 	}
 }

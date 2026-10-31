@@ -73,7 +73,9 @@ The output database contains five tables:
 | album | Metadata from `album.yml` files, linked to artists by `artistid` |
 
 Album metadata comes from `album.yml` in the album directory: `albumData.name`,
-`albumData.dateReleased.y`, and `albumData.explicitCover`. `ScanAlbums` supplies
+`albumData.dateReleased.y`, and `albumData.explicitCover`. Album YAML also supports
+an optional `albumData.genres` list of strings. The album table's `genre` column
+stores the first genre, or an empty string when the list is absent or empty. `ScanAlbums` supplies
 these rows; directories without `album.yml` do not produce album rows.
 
 The `track` table contains `id`, `path`, `albumpath`, `artistpath`, `title`,
@@ -126,6 +128,9 @@ go run cmd/scan-to-db mediascan-config.yml mediascan.db
 - Uses the first media file in scan order for `albumData.name` (album tag) and
   `albumData.dateReleased.y` (year tag). Sets `albumData.explicitCover` to
   `false` and omits release month and day.
+- Populates `albumData.genres` with unique, non-empty genre values from every
+  media file in the album, preserving first-seen order. Values are compared
+  exactly; the field is omitted when no genres are available.
 
 ```bash
 go run ./cmd/scan-to-album-yaml mediascan-config.yml [media-root]
