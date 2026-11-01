@@ -22,11 +22,13 @@ func createTableMediaFile(db *sql.DB) {
 		"album" TEXT,
 		"genre" TEXT,
 		"year" INTEGER,
+		"size" INTEGER,
+		"format" TEXT,
+		"duration" REAL,
 		"artistid" INTEGER REFERENCES artist(id),
 		"albumid" INTEGER REFERENCES album(id),
 		"trackid" INTEGER REFERENCES track(id)
 	  );` // SQL Statement for Create Table
-	// Keep in sync w/ below: path, albumpath, artistpath, title, artist, albumartist, album, genre, year
 
 	log.Println("Create mediafiles table...")
 	statement, err := db.Prepare(sql)
@@ -63,11 +65,11 @@ func createTableMediaFile(db *sql.DB) {
 	log.Println("mediafiles table created")
 }
 
-func insertMediaFile(db *sql.DB, path string, albumpath string, artistpath string, title string, artist string, albumartist string, album string, genre string, year int, artistID, albumID, trackID sql.NullInt64) error {
+func insertMediaFile(db *sql.DB, path string, albumpath string, artistpath string, title string, artist string, albumartist string, album string, genre string, year int, size *int64, format *string, duration *float64, artistID, albumID, trackID sql.NullInt64) error {
 	log.Println("Inserting mediafile record ...")
-	_, err := db.Exec(`INSERT INTO mediafile(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid, trackid)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistID, albumID, trackID)
+	_, err := db.Exec(`INSERT INTO mediafile(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, size, format, duration, artistid, albumid, trackid)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		path, albumpath, artistpath, title, artist, albumartist, album, genre, year, size, format, duration, artistID, albumID, trackID)
 	if err != nil {
 		return fmt.Errorf("insert mediafile %s: %w", path, err)
 	}
@@ -124,7 +126,7 @@ func insertMediaFiles(db *sql.DB, files []media_file.MediaFileData, tracks []tra
 			log.Printf("WARNING: no track mediaFileData path matches %s; storing NULL trackid", *mf.Path)
 		}
 		if err := insertMediaFile(db, *mf.Path, albumPath, artistPath, *mf.Title, *mf.Artist,
-			*mf.AlbumArtist, *mf.Album, *mf.Genre, *mf.Year, artistID, albumID, trackID); err != nil {
+			*mf.AlbumArtist, *mf.Album, *mf.Genre, *mf.Year, mf.Size, mf.Format, mf.Duration, artistID, albumID, trackID); err != nil {
 			return err
 		}
 	}
@@ -132,7 +134,7 @@ func insertMediaFiles(db *sql.DB, files []media_file.MediaFileData, tracks []tra
 }
 
 func displayMediaFiles(db *sql.DB) {
-	row, err := db.Query("SELECT * FROM mediafile ORDER BY artist")
+	row, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, size, format, duration, artistid, albumid, trackid FROM mediafile ORDER BY artist")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -148,11 +150,16 @@ func displayMediaFiles(db *sql.DB) {
 		var album string
 		var genre string
 		var year int
+		var size sql.NullInt64
+		var format sql.NullString
+		var duration sql.NullFloat64
 		var artistID, albumID, trackID sql.NullInt64
-		if err := row.Scan(&id, &path, &albumpath, &artistpath, &title, &artist, &albumartist, &album, &genre, &year, &artistID, &albumID, &trackID); err != nil {
+		if err := row.Scan(&id, &path, &albumpath, &artistpath, &title, &artist, &albumartist, &album, &genre, &year,
+			&size, &format, &duration, &artistID, &albumID, &trackID); err != nil {
 			log.Fatal(err)
 		}
-		log.Println("mediafile: ", id, " ", path, " ", albumpath, " ", artistpath, " ", title, " ", artist, " ", albumartist, " ", album, " ", genre, " ", year, " artistid=", artistID, " albumid=", albumID, " trackid=", trackID)
+		log.Println("mediafile: ", id, " ", path, " ", albumpath, " ", artistpath, " ", title, " ", artist, " ", albumartist, " ", album, " ", genre, " ", year,
+			" size=", size, " format=", format, " duration=", duration, " artistid=", artistID, " albumid=", albumID, " trackid=", trackID)
 
 	}
 	if err := row.Err(); err != nil {

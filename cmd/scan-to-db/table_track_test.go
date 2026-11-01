@@ -46,15 +46,21 @@ func TestTrackTableSchemaMatchesMediaFile(t *testing.T) {
 		return result
 	}
 	trackColumns, mediaColumns := columns("track"), columns("mediafile")
-	if len(trackColumns) != 12 || len(mediaColumns) != 13 {
+	if len(trackColumns) != 12 || len(mediaColumns) != 16 {
 		t.Fatalf("unexpected schema sizes: track=%d mediafile=%d", len(trackColumns), len(mediaColumns))
 	}
-	for i, c := range trackColumns {
-		if c != mediaColumns[i] {
-			t.Errorf("track column %+v differs from mediafile column %+v", c, mediaColumns[i])
+	for i := 0; i < 10; i++ {
+		if trackColumns[i] != mediaColumns[i] {
+			t.Errorf("track column %+v differs from mediafile column %+v", trackColumns[i], mediaColumns[i])
 		}
 	}
-	if trackColumns[10].Name != "artistid" || trackColumns[11].Name != "albumid" || mediaColumns[12].Name != "trackid" {
+	if mediaColumns[10].Name != "size" || mediaColumns[10].Type != "INTEGER" ||
+		mediaColumns[11].Name != "format" || mediaColumns[11].Type != "TEXT" ||
+		mediaColumns[12].Name != "duration" || mediaColumns[12].Type != "REAL" {
+		t.Fatal("mediafile size, format, or duration column has an unexpected schema")
+	}
+	if trackColumns[10].Name != "artistid" || trackColumns[11].Name != "albumid" ||
+		mediaColumns[13].Name != "artistid" || mediaColumns[14].Name != "albumid" || mediaColumns[15].Name != "trackid" {
 		t.Fatal("missing relationship columns")
 	}
 	for _, index := range []string{"idx_track_artistpath", "idx_track_albumpath"} {

@@ -15,20 +15,29 @@ func TestMediaFileTableOperations(t *testing.T) {
 	db := newTestDB(t)
 	createTableMediaFile(db)
 
+	size := int64(12345)
+	format := "MP3"
+	duration := 210.5
 	if err := insertMediaFile(db, "/music/Artist/Album/song.mp3", "/music/Artist/Album", "/music/Artist",
-		"Song", "Artist", "Album Artist", "Album", "Rock", 2026, sql.NullInt64{}, sql.NullInt64{}, sql.NullInt64{}); err != nil {
+		"Song", "Artist", "Album Artist", "Album", "Rock", 2026, &size, &format, &duration,
+		sql.NullInt64{}, sql.NullInt64{}, sql.NullInt64{}); err != nil {
 		t.Fatal(err)
 	}
 
 	var id, year int
 	var path, albumPath, artistPath, title, artist, albumArtist, album, genre string
-	if err := db.QueryRow("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year FROM mediafile").
-		Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year); err != nil {
+	var gotSize sql.NullInt64
+	var gotFormat sql.NullString
+	var gotDuration sql.NullFloat64
+	if err := db.QueryRow("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, size, format, duration FROM mediafile").
+		Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year, &gotSize, &gotFormat, &gotDuration); err != nil {
 		t.Fatal(err)
 	}
 	if id != 1 || path != "/music/Artist/Album/song.mp3" || albumPath != "/music/Artist/Album" ||
 		artistPath != "/music/Artist" || title != "Song" || artist != "Artist" ||
-		albumArtist != "Album Artist" || album != "Album" || genre != "Rock" || year != 2026 {
+		albumArtist != "Album Artist" || album != "Album" || genre != "Rock" || year != 2026 ||
+		!gotSize.Valid || gotSize.Int64 != size || !gotFormat.Valid || gotFormat.String != format ||
+		!gotDuration.Valid || gotDuration.Float64 != duration {
 		t.Fatal("mediafile row differs from inserted data")
 	}
 
@@ -82,6 +91,7 @@ func TestInsertMediaFilesUsesActualRowIDs(t *testing.T) {
 		Title: utils.Pointer("Song"), Artist: utils.Pointer("Artist"),
 		AlbumArtist: utils.Pointer("Artist"), Album: utils.Pointer("Album"),
 		Genre: utils.Pointer("Rock"), Year: utils.Pointer(2001),
+		Size: utils.Pointer(int64(12345)), Format: utils.Pointer("MP3"), Duration: utils.Pointer(210.5),
 	}}
 	if err := insertMediaFiles(db, files, tracks); err != nil {
 		t.Fatal(err)
@@ -93,6 +103,16 @@ func TestInsertMediaFilesUsesActualRowIDs(t *testing.T) {
 	}
 	if artistID != 7 || albumID != 19 || trackID != 32 {
 		t.Fatalf("incorrect IDs: %d %d %d", artistID, albumID, trackID)
+	}
+	var size sql.NullInt64
+	var format sql.NullString
+	var duration sql.NullFloat64
+	if err := db.QueryRow("SELECT size, format, duration FROM mediafile").Scan(&size, &format, &duration); err != nil {
+		t.Fatal(err)
+	}
+	if !size.Valid || size.Int64 != 12345 || !format.Valid || format.String != "MP3" ||
+		!duration.Valid || duration.Float64 != 210.5 {
+		t.Fatalf("mediafile technical metadata differs from inserted data: %v %v %v", size, format, duration)
 	}
 	if err := db.QueryRow("SELECT artistid, albumid FROM track WHERE id = 32").Scan(&artistID, &albumID); err != nil {
 		t.Fatal(err)
