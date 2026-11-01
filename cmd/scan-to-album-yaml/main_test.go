@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/album"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/utils"
@@ -20,7 +21,7 @@ func TestWriteAlbumYamlFiles(t *testing.T) {
 		{Path: utils.Pointer(filepath.Join(second, "other.mp3")), Album: utils.Pointer("Other album"), Year: utils.Pointer(2000)},
 		{Path: utils.Pointer(filepath.Join(first, "later.mp3")), Album: utils.Pointer("Later tags"), Year: utils.Pointer(2020)},
 	}
-	if err := writeAlbumYamlFiles(files); err != nil {
+	if err := writeAlbumYamlFiles(files, cli.SkipExisting); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range files[:2] {
@@ -63,7 +64,7 @@ func TestWriteAlbumYamlFilesPreservesExisting(t *testing.T) {
 				t.Fatal(err)
 			}
 			files := []media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3")), Album: utils.Pointer("Replacement"), Year: utils.Pointer(2020)}}
-			if err := writeAlbumYamlFiles(files); err != nil {
+			if err := writeAlbumYamlFiles(files, cli.SkipExisting); err != nil {
 				t.Fatal(err)
 			}
 			data, err := os.ReadFile(path)
@@ -88,7 +89,7 @@ func TestWriteAlbumYamlFilesPreservesDanglingSymlink(t *testing.T) {
 	if err := os.Symlink(target, path); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3"))}}); err != nil {
+	if err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3"))}}, cli.SkipExisting); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
@@ -96,15 +97,101 @@ func TestWriteAlbumYamlFilesPreservesDanglingSymlink(t *testing.T) {
 	}
 }
 
+func TestWriteAlbumYamlFilesOverwritesExisting(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "album.yml")
+	if err := os.WriteFile(path, []byte("albumData:\n  name: Old name\n  explicitCover: true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := []media_file.MediaFileData{{
+		Path:  utils.Pointer(filepath.Join(dir, "song.mp3")),
+		Album: utils.Pointer("Replacement"), Year: utils.Pointer(2026), Genre: utils.Pointer("Rock"),
+	}}
+	if err := writeAlbumYamlFiles(files, cli.OverwriteExisting); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got album.AlbumYamlFile
+	if err := yaml.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.AlbumData.Name != "Replacement" || got.AlbumData.DateReleased.Y != 2026 ||
+		!reflect.DeepEqual(got.AlbumData.Genres, []string{"Rock"}) || !got.AlbumData.ExplicitCover ||
+		strings.Contains(string(data), "Old name") {
+		t.Fatalf("unexpected replacement YAML: %s", data)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeAlbumYamlFiles(files, cli.OverwriteExisting); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWriteAlbumYamlFilesOverwritePreservesFalseExplicitCover(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "album.yml")
+	if err := os.WriteFile(path, []byte("albumData:\n  explicitCover: false\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files := []media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3"))}}
+	if err := writeAlbumYamlFiles(files, cli.OverwriteExisting); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got album.AlbumYamlFile
+	if err := yaml.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.AlbumData.ExplicitCover {
+		t.Fatal("expected explicitCover to remain false")
+	}
+}
+
+func TestWriteAlbumYamlFilesOverwriteRejectsInvalidExistingYAML(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "album.yml")
+	content := "albumData: ["
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := writeAlbumYamlFiles(
+		[]media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3"))}},
+		cli.OverwriteExisting,
+	)
+	if err == nil || !strings.Contains(err.Error(), "preserve explicitCover") {
+		t.Fatalf("expected explicitCover preservation parse error, got %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != content {
+		t.Fatal("invalid existing YAML should not be overwritten")
+	}
+}
+
+func TestWriteAlbumYamlFilesRejectsOverwriteNewer(t *testing.T) {
+	if err := writeAlbumYamlFiles(nil, cli.OverwriteNewer); err == nil {
+		t.Fatal("expected unsupported overwrite mode error")
+	}
+}
+
 func TestWriteAlbumYamlFilesEmpty(t *testing.T) {
-	if err := writeAlbumYamlFiles(nil); err != nil {
+	if err := writeAlbumYamlFiles(nil, cli.SkipExisting); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestWriteAlbumYamlFilesReportsCreateError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "missing")
-	err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3"))}})
+	err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: utils.Pointer(filepath.Join(dir, "song.mp3"))}}, cli.SkipExisting)
 	if err == nil || !strings.Contains(err.Error(), filepath.Join(dir, "album.yml")) {
 		t.Fatalf("expected create error with album.yml path, got %v", err)
 	}
@@ -112,7 +199,7 @@ func TestWriteAlbumYamlFilesReportsCreateError(t *testing.T) {
 
 func TestWriteAlbumYamlFilesRejectsMissingPath(t *testing.T) {
 	for _, path := range []*string{nil, utils.Pointer("")} {
-		err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: path}})
+		err := writeAlbumYamlFiles([]media_file.MediaFileData{{Path: path}}, cli.SkipExisting)
 		if err == nil || !strings.Contains(err.Error(), "missing a path") {
 			t.Fatalf("expected missing path error, got %v", err)
 		}
@@ -132,7 +219,7 @@ func TestWriteAlbumYamlFilesCollectsUniqueGenres(t *testing.T) {
 		{Path: utils.Pointer(filepath.Join(first, "06.mp3")), Genre: utils.Pointer("rock")},
 		{Path: utils.Pointer(filepath.Join(second, "02.mp3")), Genre: utils.Pointer("Jazz")},
 	}
-	if err := writeAlbumYamlFiles(files); err != nil {
+	if err := writeAlbumYamlFiles(files, cli.SkipExisting); err != nil {
 		t.Fatal(err)
 	}
 	for dir, want := range map[string][]string{

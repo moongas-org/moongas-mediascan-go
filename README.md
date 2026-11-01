@@ -104,6 +104,27 @@ If two tracks claim the same media-file path, database generation fails explicit
 
 ## Usage
 
+### Overwrite Options
+
+The shared overwrite helper currently behaves as follows:
+
+| Option | Behavior |
+| ------ | -------- |
+| No flag | Preserve existing output files. |
+| `--overwrite-existing` | Replace an existing file only if the source is newer. If no source path is supplied or the source is missing, replace it unconditionally. |
+| `--overwrite-newer` | Replace existing output unconditionally, regardless of timestamps. |
+
+The flag names are reversed relative to their usual meaning. Both options create
+missing output files and are mutually exclusive.
+
+Command-specific exceptions:
+
+- `scan-to-album-yaml`: `--overwrite-existing` always replaces generated album
+  YAML, preserving the existing `albumData.explicitCover` value; invalid
+  existing YAML is reported rather than overwritten. `--overwrite-newer` is
+  rejected.
+- `scan-to-db`: either flag permits replacement because no source path is supplied.
+
 ### Scan to Database
 
 The database command's entry point is [`main.go`](./cmd/scan-to-db/main.go).
@@ -124,7 +145,10 @@ go run cmd/scan-to-db mediascan-config.yml mediascan.db
 
 - [`cmd/scan-to-album-yaml`](./cmd/scan-to-album-yaml) - Creates an `album.yml`
   in each unique album directory found by the media-file scan. Existing files
-  are always preserved; overwrite flags are not supported.
+  are preserved by default. Add `--overwrite-existing` to replace them with
+  generated metadata, including genres. The existing `albumData.explicitCover`
+  value is preserved; other custom metadata is replaced. `--overwrite-newer`
+  is not supported.
 - Uses the first media file in scan order for `albumData.name` (album tag) and
   `albumData.dateReleased.y` (year tag). Sets `albumData.explicitCover` to
   `false` and omits release month and day.
@@ -133,7 +157,7 @@ go run cmd/scan-to-db mediascan-config.yml mediascan.db
   exactly; the field is omitted when no genres are available.
 
 ```bash
-go run ./cmd/scan-to-album-yaml mediascan-config.yml [media-root]
+go run ./cmd/scan-to-album-yaml mediascan-config.yml [media-root] [--overwrite-existing]
 ```
 
 ### Update Track Fingerprints

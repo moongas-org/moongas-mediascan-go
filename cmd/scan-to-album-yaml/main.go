@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -20,13 +21,14 @@ func main() {
 	cli.LogCurrentDir()
 
 	mode, args, err := cli.ParseCommandArgs(os.Args, 1, 2)
-	if err != nil || mode != cli.SkipExisting {
+	if err != nil || mode == cli.OverwriteNewer {
 		if err != nil {
 			log.Println("Error:", err)
 		} else {
-			log.Println("Error: album YAML files cannot be overwritten")
+			log.Println("Error: --overwrite-newer is not supported; use --overwrite-existing")
 		}
-		log.Println("Usage: go run ./cmd/scan-to-album-yaml <config-yaml> [media-root]")
+		log.Println("Usage: go run ./cmd/scan-to-album-yaml <config-yaml> [media-root] [--overwrite-existing]")
+		log.Println("Existing album.yml files are preserved by default. Add --overwrite-existing to replace them with generated metadata.")
 		os.Exit(1)
 	}
 	mediaRootDir := ""
@@ -39,12 +41,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := writeAlbumYamlFiles(media_files.ScanFiles(conf)); err != nil {
+	if err := writeAlbumYamlFiles(media_files.ScanFiles(conf), mode); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func writeAlbumYamlFiles(files []media_file.MediaFileData) error {
+func writeAlbumYamlFiles(files []media_file.MediaFileData, mode cli.OverwriteMode) error {
+	if mode != cli.SkipExisting && mode != cli.OverwriteExisting {
+		return fmt.Errorf("unsupported album YAML overwrite mode %d", mode)
+	}
 	genres := make(map[string][]string)
 	for i, m := range files {
 		if m.Path == nil || *m.Path == "" {
@@ -66,11 +71,24 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData) error {
 		seen[albumPath] = true
 
 		path := filepath.Join(albumPath, "album.yml")
+		explicitCover := false
+		if mode == cli.OverwriteExisting {
+			existingData, err := os.ReadFile(path)
+			if err == nil {
+				var existing album.AlbumYamlFile
+				if err := yaml.Unmarshal(existingData, &existing); err != nil {
+					return fmt.Errorf("parse existing %s to preserve explicitCover: %w", path, err)
+				}
+				explicitCover = existing.AlbumData.ExplicitCover
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("read existing %s to preserve explicitCover: %w", path, err)
+			}
+		}
 		albumYaml := album.AlbumYamlFile{
 			AlbumData: album.AlbumData{
 				Genres:        genres[albumPath],
 				DateReleased:  date.Date{},
-				ExplicitCover: false,
+				ExplicitCover: explicitCover,
 			},
 		}
 		if m.Album != nil {
@@ -84,7 +102,11 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData) error {
 			return fmt.Errorf("marshal %s: %w", path, err)
 		}
 
-		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
+		if mode == cli.OverwriteExisting {
+			flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		}
+		file, err := os.OpenFile(path, flags, 0o644)
 		if os.IsExist(err) {
 			log.Printf("Skipping %s (already exists)", path)
 			countSkipped++
@@ -101,12 +123,12 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData) error {
 		if closeErr != nil {
 			return fmt.Errorf("close %s: %w", path, closeErr)
 		}
-		log.Printf("Created %s", path)
+		log.Printf("Written %s", path)
 		countCreated++
 	}
 
 	log.Printf("Scanned %d media files", len(files))
-	log.Printf("Created %d album YAML (.yml) files", countCreated)
+	log.Printf("Written %d album YAML (.yml) files", countCreated)
 	log.Printf("Skipped %d album YAML (.yml) files (already exist)", countSkipped)
 	return nil
 }
