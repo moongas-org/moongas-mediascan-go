@@ -79,10 +79,15 @@ stores the first genre, or an empty string when the list is absent or empty. `Sc
 these rows; directories without `album.yml` do not produce album rows.
 
 The `track` table contains `id`, `path`, `albumpath`, `artistpath`, `title`,
-`artist`, `albumartist`, `album`, `genre`, `year`, `artistid`, and `albumid`. Its unique `path` is the
-track YAML-file path; album and artist paths are its parent and grandparent
-directories. Metadata comes from `trackData`, without requiring a local audio
-file. Artist and album path indexes use table-specific names.
+`artist`, `albumartist`, `album`, `genre`, `year`, `artistid`, `albumid`, and
+`hasspotify`. Its unique `path` is the track YAML-file path; album and artist
+paths are its parent and grandparent directories. Metadata comes from
+`trackData`, without requiring a local audio file. Artist and album path
+indexes use table-specific names. The `hasspotify` boolean defaults to false
+and is true when at least one `trackIdData.streamingData` entry has
+`streamingService: spotify` and a nonempty `trackId` in the same entry. The ID
+is checked for nonzero length; a URL or API data alone does not set the flag.
+Existing databases must be regenerated to add this column.
 
 `ScanTracks` runs once. Its results populate `track` first, then
 `trackstreaming`, with one row per `trackIdData.streamingData` entry.

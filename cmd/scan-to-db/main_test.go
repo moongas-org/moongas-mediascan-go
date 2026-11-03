@@ -85,19 +85,26 @@ mediaFileData:
 	}
 	for _, path := range []string{mp3Path, flacPath} {
 		var gotArtistPath, gotAlbumPath, gotTrackPath, service string
-		err := db.QueryRow(`SELECT a.path, b.path, t.path, s.streamingservice
+		var hasSpotify bool
+		err := db.QueryRow(`SELECT a.path, b.path, t.path, s.streamingservice, t.hasspotify
 				FROM mediafile m
 				JOIN artist a ON a.id = m.artistid
 				JOIN album b ON b.id = m.albumid AND b.artistid = a.id
 				JOIN track t ON t.id = m.trackid AND t.artistid = a.id AND t.albumid = b.id
 				JOIN trackstreaming s ON s.trackid = t.id WHERE m.path = ?`, path).
-			Scan(&gotArtistPath, &gotAlbumPath, &gotTrackPath, &service)
+			Scan(&gotArtistPath, &gotAlbumPath, &gotTrackPath, &service, &hasSpotify)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if gotArtistPath != artistPath || gotAlbumPath != albumPath || gotTrackPath != trackPath || service != "spotify" {
+		if gotArtistPath != artistPath || gotAlbumPath != albumPath || gotTrackPath != trackPath || service != "spotify" || !hasSpotify {
 			t.Fatalf("incorrect relationships for %s", path)
 		}
+	}
+	if err := displayTracks(db); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs.String(), "hasspotify= true") {
+		t.Fatal("displayed track must include hasspotify")
 	}
 	last := -1
 	for _, phase := range []string{

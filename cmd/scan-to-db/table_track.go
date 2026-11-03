@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track/streaming"
 )
 
 func createTableTrack(db *sql.DB) error {
@@ -23,7 +24,8 @@ func createTableTrack(db *sql.DB) error {
 		"genre" TEXT,
 		"year" INTEGER,
 		"artistid" INTEGER REFERENCES artist(id),
-		"albumid" INTEGER REFERENCES album(id)
+		"albumid" INTEGER REFERENCES album(id),
+		"hasspotify" BOOLEAN NOT NULL DEFAULT FALSE
 	  );`)
 	if err != nil {
 		return fmt.Errorf("create track table: %w", err)
@@ -52,11 +54,20 @@ func insertTracks(db *sql.DB, tracks []track.Track) error {
 		if err != nil {
 			return err
 		}
+		hasSpotify := false
+		if idData := t.TrackYamlFile.TrackIDData; idData != nil {
+			for _, entry := range idData.StreamingData {
+				if entry.StreamingService == streaming.Spotify && entry.TrackID != "" {
+					hasSpotify = true
+					break
+				}
+			}
+		}
 		log.Println("Inserting track record ...")
-		_, err = db.Exec(`INSERT INTO track(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		_, err = db.Exec(`INSERT INTO track(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid, hasspotify)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			t.Path, albumPath, filepath.Dir(albumPath), data.Title, data.Artist,
-			data.AlbumArtist, data.Album, data.Genre, data.Year, artistID, albumID)
+			data.AlbumArtist, data.Album, data.Genre, data.Year, artistID, albumID, hasSpotify)
 		if err != nil {
 			return fmt.Errorf("insert track %s: %w", t.Path, err)
 		}
@@ -65,7 +76,7 @@ func insertTracks(db *sql.DB, tracks []track.Track) error {
 }
 
 func displayTracks(db *sql.DB) error {
-	rows, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid FROM track ORDER BY artist")
+	rows, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid, hasspotify FROM track ORDER BY artist")
 	if err != nil {
 		return fmt.Errorf("query tracks: %w", err)
 	}
@@ -74,10 +85,11 @@ func displayTracks(db *sql.DB) error {
 		var id, year int
 		var artistID, albumID sql.NullInt64
 		var path, albumPath, artistPath, title, artist, albumArtist, album, genre string
-		if err := rows.Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year, &artistID, &albumID); err != nil {
+		var hasSpotify bool
+		if err := rows.Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year, &artistID, &albumID, &hasSpotify); err != nil {
 			return fmt.Errorf("scan track row: %w", err)
 		}
-		log.Println("track: ", id, " ", path, " ", albumPath, " ", artistPath, " ", title, " ", artist, " ", albumArtist, " ", album, " ", genre, " ", year, " artistid=", artistID, " albumid=", albumID)
+		log.Println("track: ", id, " ", path, " ", albumPath, " ", artistPath, " ", title, " ", artist, " ", albumArtist, " ", album, " ", genre, " ", year, " artistid=", artistID, " albumid=", albumID, " hasspotify=", hasSpotify)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read tracks: %w", err)
