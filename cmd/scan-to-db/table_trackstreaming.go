@@ -13,7 +13,8 @@ func createTableTrackStreaming(db *sql.DB) error {
 	_, err := db.Exec(`CREATE TABLE trackstreaming (
 		"trackid" INTEGER NOT NULL REFERENCES track(id),
 		"streamingservice" TEXT NOT NULL,
-		"streamingtrackid" TEXT NOT NULL
+		"streamingtrackid" TEXT NOT NULL,
+		"streamingtrackurl" TEXT NOT NULL
 	  );`)
 	if err != nil {
 		return fmt.Errorf("create trackstreaming table: %w", err)
@@ -36,8 +37,8 @@ func insertTrackStreaming(db *sql.DB, tracks []track.Track) error {
 		}
 		for _, streaming := range t.TrackYamlFile.TrackIDData.StreamingData {
 			log.Println("Inserting trackstreaming record ...")
-			if _, err := db.Exec(`INSERT INTO trackstreaming(trackid, streamingservice, streamingtrackid)
-				VALUES (?, ?, ?)`, trackID, string(streaming.StreamingService), streaming.TrackID); err != nil {
+			if _, err := db.Exec(`INSERT INTO trackstreaming(trackid, streamingservice, streamingtrackid, streamingtrackurl)
+				VALUES (?, ?, ?, ?)`, trackID, string(streaming.StreamingService), streaming.TrackID, streaming.TrackURL); err != nil {
 				return fmt.Errorf("insert streaming service %s for track %s: %w", streaming.StreamingService, t.Path, err)
 			}
 		}
@@ -46,18 +47,18 @@ func insertTrackStreaming(db *sql.DB, tracks []track.Track) error {
 }
 
 func displayTrackStreaming(db *sql.DB) error {
-	rows, err := db.Query("SELECT trackid, streamingservice, streamingtrackid FROM trackstreaming ORDER BY trackid, streamingservice")
+	rows, err := db.Query("SELECT trackid, streamingservice, streamingtrackid, streamingtrackurl FROM trackstreaming ORDER BY trackid, streamingservice")
 	if err != nil {
 		return fmt.Errorf("query trackstreaming: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var trackID int64
-		var service, streamingTrackID string
-		if err := rows.Scan(&trackID, &service, &streamingTrackID); err != nil {
+		var service, streamingTrackID, streamingTrackURL string
+		if err := rows.Scan(&trackID, &service, &streamingTrackID, &streamingTrackURL); err != nil {
 			return fmt.Errorf("scan trackstreaming row: %w", err)
 		}
-		log.Println("trackstreaming: ", trackID, " ", service, " ", streamingTrackID)
+		log.Println("trackstreaming: ", trackID, " ", service, " ", streamingTrackID, " ", streamingTrackURL)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read trackstreaming: %w", err)

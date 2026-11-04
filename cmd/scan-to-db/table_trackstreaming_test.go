@@ -34,8 +34,8 @@ func TestInsertTrackStreamingCorrelatesTrackIDs(t *testing.T) {
 			TrackYamlFile: track.TrackYamlFile{
 				TrackIDData: &track.TrackIDData{
 					StreamingData: []streaming.StreamingData[any]{
-						{StreamingService: streaming.Spotify, TrackID: "07RXBKfyCYIYRMLCvlGWXU"},
-						{StreamingService: streaming.AppleMusic, TrackID: "apple-id"},
+						{StreamingService: streaming.Spotify, TrackID: "07RXBKfyCYIYRMLCvlGWXU", TrackURL: "https://open.spotify.com/track/07RXBKfyCYIYRMLCvlGWXU"},
+						{StreamingService: streaming.AppleMusic, TrackID: "apple-id", TrackURL: "https://music.apple.com/track/apple-id"},
 					},
 				},
 			},
@@ -47,7 +47,7 @@ func TestInsertTrackStreamingCorrelatesTrackIDs(t *testing.T) {
 			TrackYamlFile: track.TrackYamlFile{
 				TrackIDData: &track.TrackIDData{
 					StreamingData: []streaming.StreamingData[any]{
-						{StreamingService: streaming.Spotify, TrackID: "second-id"},
+						{StreamingService: streaming.Spotify, TrackID: "second-id", TrackURL: "https://open.spotify.com/track/second-id"},
 					},
 				},
 			},
@@ -63,16 +63,16 @@ func TestInsertTrackStreamingCorrelatesTrackIDs(t *testing.T) {
 	if err := insertTrackStreaming(db, tracks); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := db.Query(`SELECT t.path, s.streamingservice, s.streamingtrackid
+	rows, err := db.Query(`SELECT t.path, s.streamingservice, s.streamingtrackid, s.streamingtrackurl
 		FROM trackstreaming s JOIN track t ON t.id = s.trackid ORDER BY t.path, s.streamingservice`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var got [][3]string
+	var got [][4]string
 	for rows.Next() {
-		var row [3]string
-		if err := rows.Scan(&row[0], &row[1], &row[2]); err != nil {
+		var row [4]string
+		if err := rows.Scan(&row[0], &row[1], &row[2], &row[3]); err != nil {
 			t.Fatal(err)
 		}
 		got = append(got, row)
@@ -80,10 +80,10 @@ func TestInsertTrackStreamingCorrelatesTrackIDs(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
 	}
-	want := [][3]string{
-		{"first.yml", "apple-music", "apple-id"},
-		{"first.yml", "spotify", "07RXBKfyCYIYRMLCvlGWXU"},
-		{"second.yml", "spotify", "second-id"},
+	want := [][4]string{
+		{"first.yml", "apple-music", "apple-id", "https://music.apple.com/track/apple-id"},
+		{"first.yml", "spotify", "07RXBKfyCYIYRMLCvlGWXU", "https://open.spotify.com/track/07RXBKfyCYIYRMLCvlGWXU"},
+		{"second.yml", "spotify", "second-id", "https://open.spotify.com/track/second-id"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("streaming rows = %v, want %v", got, want)
@@ -141,14 +141,14 @@ trackIdData:
 	if err := insertTrackStreaming(db, tracks); err != nil {
 		t.Fatal(err)
 	}
-	var gotPath, service, streamingID string
-	if err := db.QueryRow(`SELECT t.path, s.streamingservice, s.streamingtrackid
+	var gotPath, service, streamingID, streamingURL string
+	if err := db.QueryRow(`SELECT t.path, s.streamingservice, s.streamingtrackid, s.streamingtrackurl
 		FROM trackstreaming s JOIN track t ON t.id = s.trackid`).
-		Scan(&gotPath, &service, &streamingID); err != nil {
+		Scan(&gotPath, &service, &streamingID, &streamingURL); err != nil {
 		t.Fatal(err)
 	}
-	if gotPath != path || service != "spotify" || streamingID != "07RXBKfyCYIYRMLCvlGWXU" {
-		t.Fatalf("unexpected streaming row: %q %q %q", gotPath, service, streamingID)
+	if gotPath != path || service != "spotify" || streamingID != "07RXBKfyCYIYRMLCvlGWXU" || streamingURL != "https://open.spotify.com/track/07RXBKfyCYIYRMLCvlGWXU" {
+		t.Fatalf("unexpected streaming row: %q %q %q %q", gotPath, service, streamingID, streamingURL)
 	}
 }
 
