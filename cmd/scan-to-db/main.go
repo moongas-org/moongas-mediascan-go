@@ -116,7 +116,7 @@ func scanIntoDB(sqliteDatabase *sql.DB, conf conf.MediascanConf) error {
 		return err
 	}
 	tracks := track_scanner.ScanTracks(conf)
-	if err := insertTracks(sqliteDatabase, tracks); err != nil {
+	if err := insertTracks(sqliteDatabase, tracks, conf.MediaExts); err != nil {
 		return err
 	}
 	if err := insertTrackStreaming(sqliteDatabase, tracks); err != nil {

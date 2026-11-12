@@ -79,15 +79,25 @@ stores the first genre, or an empty string when the list is absent or empty. `Sc
 these rows; directories without `album.yml` do not produce album rows.
 
 The `track` table contains `id`, `path`, `albumpath`, `artistpath`, `title`,
-`artist`, `albumartist`, `album`, `genre`, `year`, `artistid`, `albumid`, and
-`hasspotify`. Its unique `path` is the track YAML-file path; album and artist
+`artist`, `albumartist`, `album`, `genre`, `year`, `artistid`, `albumid`,
+`hasspotify`, `hasmedia`, `haslyricstxt`, and `haslyricslrc`.
+Its unique `path` is the track YAML-file path; album and artist
 paths are its parent and grandparent directories. Metadata comes from
 `trackData`, without requiring a local audio file. Artist and album path
 indexes use table-specific names. The `hasspotify` boolean defaults to false
-and is true when at least one `trackIdData.streamingData` entry has
+and is calculated during database insertion. It is true when
+at least one `trackIdData.streamingData` entry has
 `streamingService: spotify` and a nonempty `trackId` in the same entry. The ID
 is checked for nonzero length; a URL or API data alone does not set the flag.
-Existing databases must be regenerated to add this column.
+The `hasmedia` boolean also defaults to false and is calculated during database
+insertion. It indicates an existing same-basename regular media file with a
+configured `mediaExts` extension beside the track YAML (case-sensitive).
+Symlinks to regular files count; directories and broken symlinks do not.
+The `haslyricstxt` and `haslyricslrc` booleans default to false and are calculated
+during database insertion using the same regular-file rules. They indicate
+same-basename `.txt` and `.lrc` files beside the track YAML, respectively,
+independently of `mediaExts` and whether an audio file exists.
+Existing databases must be regenerated to add these columns.
 
 `ScanTracks` runs once. Its results populate `track` first, then
 `trackstreaming`, with one row per `trackIdData.streamingData` entry.

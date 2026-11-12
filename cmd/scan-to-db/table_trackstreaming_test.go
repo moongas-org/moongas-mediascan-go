@@ -25,7 +25,7 @@ func TestInsertTrackStreamingCorrelatesTrackIDs(t *testing.T) {
 	if err := createTableTrackStreaming(db); err != nil {
 		t.Fatal(err)
 	}
-	if err := insertTracks(db, []track.Track{{Path: "unrelated.yml"}}); err != nil {
+	if err := insertTracks(db, []track.Track{{Path: "unrelated.yml"}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	tracks := []track.Track{
@@ -53,7 +53,7 @@ func TestInsertTrackStreamingCorrelatesTrackIDs(t *testing.T) {
 			},
 		},
 	}
-	if err := insertTracks(db, tracks); err != nil {
+	if err := insertTracks(db, tracks, nil); err != nil {
 		t.Fatal(err)
 	}
 	// Reverse the list to verify IDs are resolved by path, not slice position.
@@ -132,7 +132,7 @@ trackIdData:
 	if len(tracks) != 1 {
 		t.Fatalf("expected one scanned track, got %v", tracks)
 	}
-	if err := insertTracks(db, tracks); err != nil {
+	if err := insertTracks(db, tracks, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(path); err != nil {
@@ -182,7 +182,7 @@ func TestTrackStreamingEmptyAndErrors(t *testing.T) {
 	if err := createTableTrackStreaming(db); err == nil {
 		t.Fatal("expected duplicate table error")
 	}
-	if err := insertTracks(db, missing); err != nil {
+	if err := insertTracks(db, missing, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := db.Exec("DROP TABLE trackstreaming"); err != nil {

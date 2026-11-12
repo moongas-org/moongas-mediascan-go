@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,7 +49,7 @@ func TestTrackTableSchemaMatchesMediaFile(t *testing.T) {
 		return result
 	}
 	trackColumns, mediaColumns := columns("track"), columns("mediafile")
-	if len(trackColumns) != 13 || len(mediaColumns) != 16 {
+	if len(trackColumns) != 16 || len(mediaColumns) != 16 {
 		t.Fatalf("unexpected schema sizes: track=%d mediafile=%d", len(trackColumns), len(mediaColumns))
 	}
 	for i := 0; i < 10; i++ {
@@ -69,15 +71,42 @@ func TestTrackTableSchemaMatchesMediaFile(t *testing.T) {
 		hasSpotifyColumn.NotNull != 1 || !hasSpotifyColumn.Default.Valid || hasSpotifyColumn.PrimaryKey != 0 {
 		t.Fatalf("unexpected hasspotify column: %+v", hasSpotifyColumn)
 	}
+	hasMediaColumn := trackColumns[13]
+	if hasMediaColumn.Name != "hasmedia" || hasMediaColumn.Type != "BOOLEAN" ||
+		hasMediaColumn.NotNull != 1 || !hasMediaColumn.Default.Valid || hasMediaColumn.PrimaryKey != 0 {
+		t.Fatalf("unexpected hasmedia column: %+v", hasMediaColumn)
+	}
 	if _, err := db.Exec("INSERT INTO track(path) VALUES (?)", "default.yml"); err != nil {
 		t.Fatal(err)
 	}
-	var hasSpotify bool
-	if err := db.QueryRow("SELECT hasspotify FROM track WHERE path = ?", "default.yml").Scan(&hasSpotify); err != nil {
+	var hasSpotify, hasMedia bool
+	if err := db.QueryRow("SELECT hasspotify, hasmedia FROM track WHERE path = ?", "default.yml").Scan(&hasSpotify, &hasMedia); err != nil {
 		t.Fatal(err)
 	}
 	if hasSpotify {
 		t.Fatal("hasspotify must default to false")
+	}
+	if hasMedia {
+		t.Fatal("hasmedia must default to false")
+	}
+	if _, err := db.Exec("INSERT INTO track(path, hasmedia) VALUES (?, NULL)", "null.yml"); err == nil {
+		t.Fatal("hasmedia must not allow NULL")
+	}
+	for i, name := range []string{"haslyricstxt", "haslyricslrc"} {
+		c := trackColumns[14+i]
+		if c.Name != name || c.Type != "BOOLEAN" || c.NotNull != 1 || !c.Default.Valid || c.PrimaryKey != 0 {
+			t.Fatalf("unexpected %s column: %+v", name, c)
+		}
+		var got bool
+		if err := db.QueryRow("SELECT "+name+" FROM track WHERE path = ?", "default.yml").Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got {
+			t.Errorf("%s must default to false", name)
+		}
+		if _, err := db.Exec("INSERT INTO track(path, "+name+") VALUES (?, NULL)", name+".yml"); err == nil {
+			t.Errorf("%s must not allow NULL", name)
+		}
 	}
 	for _, index := range []string{"idx_track_artistpath", "idx_track_albumpath"} {
 		var count int
@@ -121,7 +150,7 @@ func TestInsertScannedTracks(t *testing.T) {
 	if len(tracks) != 1 {
 		t.Fatalf("expected one scanned track without an audio file, got %+v", tracks)
 	}
-	if err := insertTracks(db, tracks); err != nil {
+	if err := insertTracks(db, tracks, nil); err != nil {
 		t.Fatal(err)
 	}
 	var id, year int
@@ -138,8 +167,246 @@ func TestInsertScannedTracks(t *testing.T) {
 	if err := displayTracks(db); err != nil {
 		t.Fatal(err)
 	}
-	if err := insertTracks(db, tracks); err == nil || !strings.Contains(err.Error(), path) {
+	if err := insertTracks(db, tracks, nil); err == nil || !strings.Contains(err.Error(), path) {
 		t.Fatalf("expected duplicate path error identifying track, got %v", err)
+	}
+}
+
+func TestInsertTracksDetectsLyrics(t *testing.T) {
+	for _, ext := range []string{".txt", ".lrc"} {
+		for _, scenario := range []struct {
+			name string
+			kind string
+			want bool
+		}{
+			{"missing", "missing", false},
+			{"regular-file", "file", true},
+			{"both-formats", "both", true},
+			{"different-basename", "other", false},
+			{"different-directory", "nested", false},
+			{"uppercase-extension", "uppercase", false},
+			{"directory", "directory", false},
+			{"symlink-to-file", "symlink", true},
+			{"broken-symlink", "broken", false},
+			{"symlink-to-directory", "directory-link", false},
+			{"access-error", "loop", false},
+		} {
+			t.Run(ext+"/"+scenario.name, func(t *testing.T) {
+				db := newTestDB(t)
+				createTableArtist(db)
+				if err := createTableAlbum(db); err != nil {
+					t.Fatal(err)
+				}
+				if err := createTableTrack(db); err != nil {
+					t.Fatal(err)
+				}
+				dir := t.TempDir()
+				path := filepath.Join(dir, "song.live.yml")
+				lyricsPath := filepath.Join(dir, "song.live"+ext)
+				write := func(path string) {
+					t.Helper()
+					if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.WriteFile(path, nil, 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+				link := func(target string) {
+					t.Helper()
+					if err := os.Symlink(target, lyricsPath); err != nil {
+						t.Fatal(err)
+					}
+				}
+				switch scenario.kind {
+				case "file":
+					write(lyricsPath)
+				case "both":
+					write(filepath.Join(dir, "song.live.txt"))
+					write(filepath.Join(dir, "song.live.lrc"))
+				case "other":
+					write(filepath.Join(dir, "other"+ext))
+				case "nested":
+					write(filepath.Join(dir, "nested", "song.live"+ext))
+				case "uppercase":
+					write(filepath.Join(dir, "song.live"+strings.ToUpper(ext)))
+				case "directory":
+					if err := os.Mkdir(lyricsPath, 0o755); err != nil {
+						t.Fatal(err)
+					}
+				case "symlink":
+					write(filepath.Join(dir, "source"))
+					link("source")
+				case "broken":
+					link("missing")
+				case "directory-link":
+					link(dir)
+				case "loop":
+					link(filepath.Base(lyricsPath))
+				}
+				var logs bytes.Buffer
+				previous := log.Writer()
+				log.SetOutput(&logs)
+				t.Cleanup(func() { log.SetOutput(previous) })
+				if err := insertTracks(db, []track.Track{{Path: path}}, nil); err != nil {
+					t.Fatal(err)
+				}
+				var txt, lrc bool
+				if err := db.QueryRow("SELECT haslyricstxt, haslyricslrc FROM track WHERE path = ?", path).Scan(&txt, &lrc); err != nil {
+					t.Fatal(err)
+				}
+				wantTxt, wantLrc := ext == ".txt" && scenario.want, ext == ".lrc" && scenario.want
+				if scenario.kind == "both" {
+					wantTxt, wantLrc = true, true
+				}
+				if txt != wantTxt || lrc != wantLrc {
+					t.Errorf("lyrics flags = (%t, %t), want (%t, %t)", txt, lrc, wantTxt, wantLrc)
+				}
+				if err := displayTracks(db); err != nil {
+					t.Fatal(err)
+				}
+				for _, expected := range []string{
+					fmt.Sprintf("haslyricstxt= %t", wantTxt),
+					fmt.Sprintf("haslyricslrc= %t", wantLrc),
+				} {
+					if !strings.Contains(logs.String(), expected) {
+						t.Errorf("missing %q in track display", expected)
+					}
+				}
+				if scenario.kind == "loop" && !strings.Contains(logs.String(), "ERROR accessing "+lyricsPath) {
+					t.Fatalf("expected lyrics access error in logs, got %s", logs.String())
+				}
+			})
+		}
+	}
+}
+
+func TestInsertTracksDetectsMedia(t *testing.T) {
+	tests := []struct {
+		name       string
+		mediaFiles []string
+		mediaDirs  []string
+		linkTarget string
+		extensions []string
+		want       bool
+	}{
+		{name: "no-media", extensions: []string{".mp3"}},
+		{name: "matching-media", mediaFiles: []string{"song.live.mp3"}, extensions: []string{".mp3"}, want: true},
+		{name: "multiple-media", mediaFiles: []string{"song.live.mp3", "song.live.m4a"}, extensions: []string{".mp3", ".m4a"}, want: true},
+		{name: "second-extension", mediaFiles: []string{"song.live.m4a"}, extensions: []string{".mp3", ".m4a"}, want: true},
+		{name: "unconfigured-extension", mediaFiles: []string{"song.live.flac"}, extensions: []string{".mp3"}},
+		{name: "no-configured-extensions", mediaFiles: []string{"song.live.mp3"}},
+		{name: "different-basename", mediaFiles: []string{"other.mp3", "song.live.extra.mp3"}, extensions: []string{".mp3"}},
+		{name: "different-directory", mediaFiles: []string{"nested/song.live.mp3"}, extensions: []string{".mp3"}},
+		{name: "case-sensitive-extension", mediaFiles: []string{"song.live.MP3"}, extensions: []string{".mp3"}},
+		{name: "configured-uppercase-extension", mediaFiles: []string{"song.live.MP3"}, extensions: []string{".MP3"}, want: true},
+		{name: "directory-not-media", mediaDirs: []string{"song.live.mp3"}, extensions: []string{".mp3"}},
+		{name: "symlink-to-file", mediaFiles: []string{"source.bin"}, linkTarget: "source.bin", extensions: []string{".mp3"}, want: true},
+		{name: "broken-symlink", linkTarget: "missing.mp3", extensions: []string{".mp3"}},
+		{name: "symlink-to-directory", mediaDirs: []string{"source"}, linkTarget: "source", extensions: []string{".mp3"}},
+		{name: "access-error-continues", mediaFiles: []string{"song.live.m4a"}, linkTarget: "song.live.mp3", extensions: []string{".mp3", ".m4a"}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := newTestDB(t)
+			createTableArtist(db)
+			if err := createTableAlbum(db); err != nil {
+				t.Fatal(err)
+			}
+			if err := createTableTrack(db); err != nil {
+				t.Fatal(err)
+			}
+			dir := t.TempDir()
+			for _, name := range tt.mediaFiles {
+				path := filepath.Join(dir, name)
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, nil, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			for _, name := range tt.mediaDirs {
+				if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.linkTarget != "" {
+				if err := os.Symlink(tt.linkTarget, filepath.Join(dir, "song.live.mp3")); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var logs bytes.Buffer
+			previous := log.Writer()
+			log.SetOutput(&logs)
+			t.Cleanup(func() { log.SetOutput(previous) })
+			path := filepath.Join(dir, "song.live.yml")
+			if err := insertTracks(db, []track.Track{{Path: path}}, tt.extensions); err != nil {
+				t.Fatal(err)
+			}
+			var got bool
+			if err := db.QueryRow("SELECT hasmedia FROM track WHERE path = ?", path).Scan(&got); err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.want {
+				t.Errorf("hasmedia = %t, want %t", got, tt.want)
+			}
+			if tt.name == "access-error-continues" && !strings.Contains(logs.String(), "ERROR accessing "+filepath.Join(dir, "song.live.mp3")) {
+				t.Fatalf("expected media access error in logs, got %s", logs.String())
+			}
+		})
+	}
+}
+
+func TestScannedTracksHaveMedia(t *testing.T) {
+	db := newTestDB(t)
+	root := t.TempDir()
+	dir := filepath.Join(root, "Artist", "Album")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"with-media", "without-media", "unconfigured-media"} {
+		if err := os.WriteFile(filepath.Join(dir, name+".yml"), []byte(`trackData:
+  title: Song
+  artist: Artist
+  albumartist: Artist
+  album: Album
+  genre: Rock
+  year: 2026
+`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"with-media.mp3", "unconfigured-media.flac"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := scanIntoDB(db, conf.MediascanConf{MediaDirs: []string{root}, MediaExts: []string{".mp3"}}); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{
+		"with-media": true, "without-media": false, "unconfigured-media": false,
+	} {
+		var got bool
+		if err := db.QueryRow("SELECT hasmedia FROM track WHERE path = ?", filepath.Join(dir, name+".yml")).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("%s: hasmedia = %t, want %t", name, got, want)
+		}
+	}
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+	if err := displayTracks(db); err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{"hasmedia= true", "hasmedia= false"} {
+		if !strings.Contains(logs.String(), expected) {
+			t.Errorf("missing %q in track display", expected)
+		}
 	}
 }
 
@@ -245,7 +512,7 @@ func TestTrackTableEmptyAndErrors(t *testing.T) {
 	if err := createTableTrack(db); err != nil {
 		t.Fatal(err)
 	}
-	if err := insertTracks(db, nil); err != nil {
+	if err := insertTracks(db, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := displayTracks(db); err != nil {
@@ -264,7 +531,7 @@ func TestTrackTableEmptyAndErrors(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := insertTracks(db, []track.Track{{Path: "song.yml"}}); err == nil {
+	if err := insertTracks(db, []track.Track{{Path: "song.yml"}}, nil); err == nil {
 		t.Fatal("expected insert error on closed database")
 	}
 	if err := displayTracks(db); err == nil {

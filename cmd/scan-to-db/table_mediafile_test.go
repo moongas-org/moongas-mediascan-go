@@ -83,7 +83,7 @@ func TestInsertMediaFilesUsesActualRowIDs(t *testing.T) {
 			},
 		},
 	}}
-	if err := insertTracks(db, tracks); err != nil {
+	if err := insertTracks(db, tracks, nil); err != nil {
 		t.Fatal(err)
 	}
 	files := []media_file.MediaFileData{{

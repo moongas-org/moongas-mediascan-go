@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track/streaming"
@@ -25,7 +27,10 @@ func createTableTrack(db *sql.DB) error {
 		"year" INTEGER,
 		"artistid" INTEGER REFERENCES artist(id),
 		"albumid" INTEGER REFERENCES album(id),
-		"hasspotify" BOOLEAN NOT NULL DEFAULT FALSE
+		"hasspotify" BOOLEAN NOT NULL DEFAULT FALSE,
+		"hasmedia" BOOLEAN NOT NULL DEFAULT FALSE,
+		"haslyricstxt" BOOLEAN NOT NULL DEFAULT FALSE,
+		"haslyricslrc" BOOLEAN NOT NULL DEFAULT FALSE
 	  );`)
 	if err != nil {
 		return fmt.Errorf("create track table: %w", err)
@@ -42,7 +47,7 @@ func createTableTrack(db *sql.DB) error {
 	return nil
 }
 
-func insertTracks(db *sql.DB, tracks []track.Track) error {
+func insertTracks(db *sql.DB, tracks []track.Track, mediaExts []string) error {
 	for _, t := range tracks {
 		data := t.TrackYamlFile.TrackData
 		albumPath := filepath.Dir(t.Path)
@@ -63,11 +68,21 @@ func insertTracks(db *sql.DB, tracks []track.Track) error {
 				}
 			}
 		}
+		hasMedia := false
+		basename := strings.TrimSuffix(t.Path, filepath.Ext(t.Path))
+		for _, ext := range mediaExts {
+			if regularFileExists(basename + ext) {
+				hasMedia = true
+				break
+			}
+		}
+		hasLyricsTxt := regularFileExists(basename + ".txt")
+		hasLyricsLrc := regularFileExists(basename + ".lrc")
 		log.Println("Inserting track record ...")
-		_, err = db.Exec(`INSERT INTO track(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid, hasspotify)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		_, err = db.Exec(`INSERT INTO track(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid, hasspotify, hasmedia, haslyricstxt, haslyricslrc)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			t.Path, albumPath, filepath.Dir(albumPath), data.Title, data.Artist,
-			data.AlbumArtist, data.Album, data.Genre, data.Year, artistID, albumID, hasSpotify)
+			data.AlbumArtist, data.Album, data.Genre, data.Year, artistID, albumID, hasSpotify, hasMedia, hasLyricsTxt, hasLyricsLrc)
 		if err != nil {
 			return fmt.Errorf("insert track %s: %w", t.Path, err)
 		}
@@ -75,8 +90,19 @@ func insertTracks(db *sql.DB, tracks []track.Track) error {
 	return nil
 }
 
+func regularFileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			log.Printf("ERROR accessing %s: %v", path, err)
+		}
+		return false
+	}
+	return info.Mode().IsRegular()
+}
+
 func displayTracks(db *sql.DB) error {
-	rows, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid, hasspotify FROM track ORDER BY artist")
+	rows, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid, hasspotify, hasmedia, haslyricstxt, haslyricslrc FROM track ORDER BY artist")
 	if err != nil {
 		return fmt.Errorf("query tracks: %w", err)
 	}
@@ -85,11 +111,11 @@ func displayTracks(db *sql.DB) error {
 		var id, year int
 		var artistID, albumID sql.NullInt64
 		var path, albumPath, artistPath, title, artist, albumArtist, album, genre string
-		var hasSpotify bool
-		if err := rows.Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year, &artistID, &albumID, &hasSpotify); err != nil {
+		var hasSpotify, hasMedia, hasLyricsTxt, hasLyricsLrc bool
+		if err := rows.Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year, &artistID, &albumID, &hasSpotify, &hasMedia, &hasLyricsTxt, &hasLyricsLrc); err != nil {
 			return fmt.Errorf("scan track row: %w", err)
 		}
-		log.Println("track: ", id, " ", path, " ", albumPath, " ", artistPath, " ", title, " ", artist, " ", albumArtist, " ", album, " ", genre, " ", year, " artistid=", artistID, " albumid=", albumID, " hasspotify=", hasSpotify)
+		log.Println("track: ", id, " ", path, " ", albumPath, " ", artistPath, " ", title, " ", artist, " ", albumArtist, " ", album, " ", genre, " ", year, " artistid=", artistID, " albumid=", albumID, " hasspotify=", hasSpotify, " hasmedia=", hasMedia, " haslyricstxt=", hasLyricsTxt, " haslyricslrc=", hasLyricsLrc)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read tracks: %w", err)
