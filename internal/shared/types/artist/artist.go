@@ -1,7 +1,8 @@
 package artist
 
-// Artist contains artist.yml metadata and the directory containing the file.
+// Artist contains an artist directory and any available artist.yml metadata.
 type Artist struct {
 	ArtistYamlFile ArtistYamlFile `yaml:"artistYamlFile"`
 	Path           string         `yaml:"path"`
+	HasArtistYaml  bool           `yaml:"hasArtistYaml"`
 }

@@ -12,12 +12,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ScanArtists returns artist.yml metadata with its containing directory.
+// ScanArtists returns direct child artist directories and any directories with
+// readable artist.yml files elsewhere under the configured media directories.
 func ScanArtists(conf conf.MediascanConf) []artist.Artist {
 	var scannedArtists []artist.Artist
-	countLoadFailed := 0
-	countSkipped := 0
+	indexByPath := make(map[string]int)
+	addArtist := func(a artist.Artist) {
+		if index, ok := indexByPath[a.Path]; ok {
+			if a.HasArtistYaml {
+				scannedArtists[index] = a
+			}
+			return
+		}
+		indexByPath[a.Path] = len(scannedArtists)
+		scannedArtists = append(scannedArtists, a)
+	}
 	for _, mediaDir := range conf.MediaDirs {
+		mediaDir = filepath.Clean(mediaDir)
 		if _, err := os.Stat(mediaDir); err != nil {
 			log.Printf("ERROR: mediaDir does not exist or could not be accessed: %s (%v)", mediaDir, err)
 			continue
@@ -34,34 +45,43 @@ func ScanArtists(conf conf.MediascanConf) []artist.Artist {
 					return nil
 				}
 
-				if !info.IsDir() && info.Name() == "artist.yml" {
-					log.Printf("Reading filepath %s", path)
-					if utils.ContainsAnyOf(path, conf.ExcludePaths) {
-						log.Printf("Skipping %s (ExcludePaths)", path)
-						countSkipped += 1
-						return nil
+				if info.IsDir() {
+					if path != mediaDir && filepath.Dir(path) == mediaDir &&
+						!utils.ContainsAnyOf(path, conf.ExcludePaths) {
+						addArtist(artist.Artist{Path: path})
 					}
-					var a artist.Artist
-					a.Path = filepath.Dir(path)
-
-					// Read the YAML file
-					data, err := os.ReadFile(path)
-					utils.Check(err, path)
-
-					// Unmarshal the YAML data into the Config struct
-					var dataFile artist.ArtistYamlFile
-					err = yaml.Unmarshal(data, &dataFile)
-					utils.Check(err, path)
-
-					a.ArtistYamlFile = dataFile
-
-					scannedArtists = append(scannedArtists, a)
+					return nil
 				}
+				if info.Name() != "artist.yml" || utils.ContainsAnyOf(path, conf.ExcludePaths) {
+					return nil
+				}
+				log.Printf("Reading filepath %s", path)
+				fileInfo, err := os.Stat(path)
+				if err != nil {
+					log.Printf("ERROR inspecting %s: %v", path, err)
+					return nil
+				}
+				if !fileInfo.Mode().IsRegular() {
+					log.Printf("Skipping %s (not a regular file)", path)
+					return nil
+				}
+				data, err := os.ReadFile(path)
+				if err != nil {
+					log.Printf("ERROR reading %s: %v", path, err)
+					return nil
+				}
+				a := artist.Artist{Path: filepath.Dir(path), HasArtistYaml: true}
+				var metadata artist.ArtistYamlFile
+				if err := yaml.Unmarshal(data, &metadata); err != nil {
+					log.Printf("ERROR parsing %s: %v", path, err)
+				} else {
+					a.ArtistYamlFile = metadata
+				}
+				addArtist(a)
 				return nil
 			})
 		if err != nil {
 			log.Printf("ERROR loading file: %v", err)
-			countLoadFailed += 1
 		}
 	}
 	return scannedArtists

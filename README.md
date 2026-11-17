@@ -48,14 +48,14 @@ graph TD;
   path and parsed `TrackYamlFile`; no matching audio file or `album.yml` is required.
 
 - [`ScanArtists`](./internal/shared/scanner/artist/artist_scanner.go) returns
-  `[]artist.Artist`, containing each `ArtistYamlFile` and its directory
-  path.
+  `[]artist.Artist` for non-excluded direct child directories of configured
+  media roots and for other directories with readable `artist.yml` files.
+  Each result records the directory path and whether the file was read.
 
 - [`ScanAlbums`](./internal/shared/scanner/album/album_scanner.go) walks configured
-  media directories for `album.yml` files and returns `[]album.Album`,
-  containing each `AlbumYamlFile` and its directory path.
-  It honors case-insensitive `excludePaths`; access, read, and YAML parse errors
-  are logged and skipped. It does not infer albums from media files.
+  media directories and returns `[]album.Album` for non-excluded
+  `root/artist/album` directories and any other directories with readable
+  `album.yml` files. It does not require local media files.
 
 - Suports reading metadata Moongas metadata file formats such as `artist.yml` and `album.yml` files
 - Output format (SQLite database) is compatible with the Moongas `mediascan` python package
@@ -69,14 +69,24 @@ The output database contains five tables:
 | mediafile | Track metadata from individual media files (ID3 tag information read from `mp3` files) |
 | track | Core metadata from track YAML files discovered by `ScanTracks`, linked by `artistid` and `albumid` |
 | trackstreaming | Streaming service identifiers for tracks, correlated by `trackid` |
-| artist | Metadata from `artist.yml` files |
-| album | Metadata from `album.yml` files, linked to artists by `artistid` |
+| artist | Artist directories, metadata from `artist.yml`, and the `hasartistyaml` flag |
+| album | Album directories, metadata from `album.yml`, and the `hasalbumyaml` flag; linked by `artistid` |
+
+The artist table's `hasartistyaml` boolean is true if `ScanArtists` could read
+`artist.yml`, and false if the file is missing, excluded, or unreadable.
+Malformed YAML is logged but still counts as readable. When no usable name is
+provided, the directory name is used. Album, track, and media-file rows can link
+to artists without YAML. Regenerate existing databases to add the column.
 
 Album metadata comes from `album.yml` in the album directory: `albumData.name`,
 `albumData.dateReleased.y`, and `albumData.explicitCover`. Album YAML also supports
 an optional `albumData.genres` list of strings. The album table's `genre` column
-stores the first genre, or an empty string when the list is absent or empty. `ScanAlbums` supplies
-these rows; directories without `album.yml` do not produce album rows.
+stores the first genre, or an empty string when the list is absent or empty.
+The `hasalbumyaml` boolean is true if `ScanAlbums` could read `album.yml`,
+and false if the file is missing, excluded, or unreadable. Malformed YAML is
+logged but still counts as readable. When no usable name is provided, the
+directory name is used. Tracks and media files can link to albums without YAML.
+Regenerate existing databases to add the column.
 
 The `track` table contains `id`, `path`, `albumpath`, `artistpath`, `title`,
 `artist`, `albumartist`, `album`, `genre`, `year`, `artistid`, `albumid`,
@@ -156,20 +166,35 @@ test files.
 go run cmd/scan-to-db mediascan-config.yml mediascan.db
 ```
 
+### Generate Track YAML
+
+[`cmd/scan-to-track-yaml`](./cmd/scan-to-track-yaml) creates a `.yml` file
+beside each scanned media file. String metadata that resembles a YAML 1.1 or
+1.2 boolean (such as `Yes`, `off`, or `true`) is quoted so it remains a string.
+Existing files are preserved by default; see the overwrite options above.
+
+```bash
+go run ./cmd/scan-to-track-yaml mediascan-config.yml [media-root] [--overwrite-existing|--overwrite-newer]
+```
+
 ### Generate Album YAML
 
 - [`cmd/scan-to-album-yaml`](./cmd/scan-to-album-yaml) - Creates an `album.yml`
-  in each unique album directory found by the media-file scan. Existing files
+  in each album directory containing scanned media files or track `.yml` files.
+  An album does not need any local media files. Existing files
   are preserved by default. Add `--overwrite-existing` to replace them with
   generated metadata, including genres. The existing `albumData.explicitCover`
   value is preserved; other custom metadata is replaced. `--overwrite-newer`
   is not supported.
-- Uses the first media file in scan order for `albumData.name` (album tag) and
-  `albumData.dateReleased.y` (year tag). Sets `albumData.explicitCover` to
-  `false` and omits release month and day.
-- Populates `albumData.genres` with unique, non-empty genre values from every
-  media file in the album, preserving first-seen order. Values are compared
-  exactly; the field is omitted when no genres are available.
+- Uses the first track YAML in scan order for `albumData.name` and
+  `albumData.dateReleased.y`, or the first media file's album and year tags if
+  there is no track YAML. New albums set `albumData.explicitCover` to `false`
+  and omit release month and day.
+- Populates `albumData.genres` with unique, non-empty genres from track YAML
+  first, then from media files without matching track YAML. Matches within an
+  album directory use `mediaFileData` paths (relative to the track YAML or
+  absolute), or the same filename stem when no path is listed. Genre values
+  are compared exactly; the field is omitted when no genres are available.
 
 ```bash
 go run ./cmd/scan-to-album-yaml mediascan-config.yml [media-root] [--overwrite-existing]

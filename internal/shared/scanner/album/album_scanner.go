@@ -12,11 +12,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ScanAlbums returns album.yml metadata with its containing directory.
-// Inaccessible paths and invalid YAML are logged and skipped.
+// ScanAlbums returns root/artist/album directories and any other directories
+// with readable album.yml files under the configured media directories.
 func ScanAlbums(conf conf.MediascanConf) []album.Album {
 	var albums []album.Album
+	indexByPath := make(map[string]int)
+	addAlbum := func(a album.Album) {
+		if index, ok := indexByPath[a.Path]; ok {
+			if a.HasAlbumYaml {
+				albums[index] = a
+			}
+			return
+		}
+		indexByPath[a.Path] = len(albums)
+		albums = append(albums, a)
+	}
 	for _, mediaDir := range conf.MediaDirs {
+		mediaDir = filepath.Clean(mediaDir)
 		log.Printf("Scanning album media dir: %s", mediaDir)
 		err := filepath.Walk(mediaDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -27,7 +39,15 @@ func ScanAlbums(conf conf.MediascanConf) []album.Album {
 				log.Printf("Skipping nil file info for %s", path)
 				return nil
 			}
-			if info.IsDir() || info.Name() != "album.yml" {
+			if info.IsDir() {
+				parent := filepath.Dir(path)
+				if path != mediaDir && parent != mediaDir && filepath.Dir(parent) == mediaDir &&
+					!utils.ContainsAnyOf(path, conf.ExcludePaths) {
+					addAlbum(album.Album{Path: path})
+				}
+				return nil
+			}
+			if info.Name() != "album.yml" {
 				return nil
 			}
 			if utils.ContainsAnyOf(path, conf.ExcludePaths) {
@@ -36,20 +56,30 @@ func ScanAlbums(conf conf.MediascanConf) []album.Album {
 			}
 
 			log.Printf("Reading filepath %s", path)
+			if info.Mode()&os.ModeSymlink != 0 {
+				info, err = os.Stat(path)
+				if err != nil {
+					log.Printf("ERROR reading %s: %v", path, err)
+					return nil
+				}
+			}
+			if !info.Mode().IsRegular() {
+				log.Printf("Skipping %s (not a regular file)", path)
+				return nil
+			}
 			data, err := os.ReadFile(path)
 			if err != nil {
 				log.Printf("ERROR reading %s: %v", path, err)
 				return nil
 			}
+			a := album.Album{Path: filepath.Dir(path), HasAlbumYaml: true}
 			var file album.AlbumYamlFile
 			if err := yaml.Unmarshal(data, &file); err != nil {
 				log.Printf("ERROR parsing %s: %v", path, err)
-				return nil
+			} else {
+				a.AlbumYamlFile = file
 			}
-			albums = append(albums, album.Album{
-				AlbumYamlFile: file,
-				Path:          filepath.Dir(path),
-			})
+			addAlbum(a)
 			return nil
 		})
 		if err != nil {

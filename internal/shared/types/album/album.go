@@ -1,7 +1,8 @@
 package album
 
-// Album contains album.yml metadata and the directory containing the file.
+// Album contains an album directory and any available album.yml metadata.
 type Album struct {
 	AlbumYamlFile AlbumYamlFile `yaml:"albumYamlFile"`
 	Path          string        `yaml:"path"`
+	HasAlbumYaml  bool          `yaml:"hasAlbumYaml"`
 }

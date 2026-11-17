@@ -45,12 +45,12 @@ func TestScanArtists_ReadsArtistYmlFiles(t *testing.T) {
 
 	artists := ScanArtists(conf.MediascanConf{MediaDirs: []string{root}})
 
-	if len(artists) != 1 {
-		t.Fatalf("expected 1 artist, got %d", len(artists))
+	if len(artists) != 2 || artists[0].Path != filepath.Dir(artistDir) || artists[0].HasArtistYaml {
+		t.Fatalf("expected a top-level fallback and a nested YAML artist, got %+v", artists)
 	}
-	a := artists[0]
-	if a.Path != artistDir {
-		t.Errorf("got path %q, want %q", a.Path, artistDir)
+	a := artists[1]
+	if a.Path != artistDir || !a.HasArtistYaml {
+		t.Errorf("got path %q and HasArtistYaml=%t, want %q and true", a.Path, a.HasArtistYaml, artistDir)
 	}
 	data := a.ArtistYamlFile.ArtistData
 	if len(data.ArtistNames) != 1 || data.ArtistNames[0] != "The Beatles" {
@@ -95,5 +95,32 @@ func TestScanArtists_SkipsMissingMediaDir(t *testing.T) {
 
 	if len(artists) != 0 {
 		t.Fatalf("expected 0 artists, got %d", len(artists))
+	}
+}
+
+func TestScanArtists_FlagsReadableFiles(t *testing.T) {
+	root := t.TempDir()
+	malformed := filepath.Join(root, "Malformed")
+	writeArtistYml(t, malformed, "artistData: [")
+	missing := filepath.Join(root, "Missing")
+	brokenLink := filepath.Join(root, "BrokenLink")
+	for _, dir := range []string{missing, brokenLink, filepath.Join(missing, "Nested")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(filepath.Join(root, "absent.yml"), filepath.Join(brokenLink, "artist.yml")); err != nil {
+		t.Fatal(err)
+	}
+	artists := ScanArtists(conf.MediascanConf{MediaDirs: []string{root}})
+	want := map[string]bool{brokenLink: false, missing: false, malformed: true}
+	for _, a := range artists {
+		if hasYaml, ok := want[a.Path]; !ok || hasYaml != a.HasArtistYaml {
+			t.Errorf("unexpected scan result: %+v", a)
+		}
+		delete(want, a.Path)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing artist results: %v", want)
 	}
 }

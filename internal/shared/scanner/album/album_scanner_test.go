@@ -33,7 +33,7 @@ func writeAlbumYml(t *testing.T, dir, content string) {
 	}
 }
 
-func TestScanAlbumsReadsOnlyAlbumYml(t *testing.T) {
+func TestScanAlbumsReadsAlbumYml(t *testing.T) {
 	first, second := t.TempDir(), t.TempDir()
 	dir := filepath.Join(first, "Artist", "Album")
 	writeAlbumYml(t, dir, testAlbumYml)
@@ -53,13 +53,15 @@ func TestScanAlbumsReadsOnlyAlbumYml(t *testing.T) {
 			AlbumYamlFile: album.AlbumYamlFile{
 				AlbumData: album.AlbumData{Name: "Example Album", DateReleased: date.Date{Y: 1993, M: 5, D: 4}, ExplicitCover: true},
 			},
-			Path: dir,
+			Path:         dir,
+			HasAlbumYaml: true,
 		},
 		{
 			AlbumYamlFile: album.AlbumYamlFile{
 				AlbumData: album.AlbumData{Name: "Other Album", DateReleased: date.Date{Y: 2000}},
 			},
-			Path: filepath.Join(second, "Other"),
+			Path:         filepath.Join(second, "Other"),
+			HasAlbumYaml: true,
 		},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -71,6 +73,9 @@ func TestScanAlbumsSkipsExcludedPaths(t *testing.T) {
 	root := t.TempDir()
 	writeAlbumYml(t, filepath.Join(root, "Keep"), testAlbumYml)
 	writeAlbumYml(t, filepath.Join(root, "OmitThisAlbum", "Nested"), testAlbumYml)
+	if err := os.MkdirAll(filepath.Join(root, "Artist", "OmitThisAlbum"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	got := ScanAlbums(conf.MediascanConf{
 		MediaDirs: []string{root}, ExcludePaths: []string{"OMITTHISALBUM"},
 	})
@@ -82,12 +87,16 @@ func TestScanAlbumsSkipsExcludedPaths(t *testing.T) {
 
 func TestScanAlbumsLogsErrorsAndContinues(t *testing.T) {
 	root := t.TempDir()
-	writeAlbumYml(t, filepath.Join(root, "Invalid"), "albumData: [")
+	invalid := filepath.Join(root, "Artist", "Invalid")
+	writeAlbumYml(t, invalid, "albumData: [")
 	writeAlbumYml(t, filepath.Join(root, "Valid"), testAlbumYml)
 	missing := filepath.Join(root, "does-not-exist")
-	broken := filepath.Join(root, "Broken")
-	if err := os.Mkdir(broken, 0o755); err != nil {
-		t.Fatal(err)
+	broken := filepath.Join(root, "Artist", "Broken")
+	empty := filepath.Join(root, "Artist", "Empty")
+	for _, dir := range []string{broken, filepath.Join(empty, "Nested")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := os.Symlink(missing, filepath.Join(broken, "album.yml")); err != nil {
 		t.Fatal(err)
@@ -98,9 +107,19 @@ func TestScanAlbumsLogsErrorsAndContinues(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(original) })
 
 	got := ScanAlbums(conf.MediascanConf{MediaDirs: []string{missing, root}})
-	if len(got) != 1 || got[0].AlbumYamlFile.AlbumData.Name != "Example Album" ||
-		got[0].Path != filepath.Join(root, "Valid") {
-		t.Fatalf("expected valid album despite errors, got %+v", got)
+	want := []album.Album{
+		{Path: broken},
+		{Path: empty},
+		{Path: invalid, HasAlbumYaml: true},
+		{
+			Path: filepath.Join(root, "Valid"), HasAlbumYaml: true,
+			AlbumYamlFile: album.AlbumYamlFile{
+				AlbumData: album.AlbumData{Name: "Example Album", DateReleased: date.Date{Y: 1993, M: 5, D: 4}, ExplicitCover: true},
+			},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("albums = %+v, want %+v", got, want)
 	}
 	for _, message := range []string{"ERROR accessing " + missing, "ERROR parsing ", "ERROR reading "} {
 		if !strings.Contains(output.String(), message) {

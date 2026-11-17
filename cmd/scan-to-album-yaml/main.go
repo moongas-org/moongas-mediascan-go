@@ -8,12 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
+	track_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/track"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/album"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/conf"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/date"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
 	"gopkg.in/yaml.v3"
 )
 
@@ -41,35 +45,76 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := writeAlbumYamlFiles(media_files.ScanFiles(conf), mode); err != nil {
+	if err := scanToAlbumYaml(conf, mode); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func writeAlbumYamlFiles(files []media_file.MediaFileData, mode cli.OverwriteMode) error {
+func scanToAlbumYaml(conf conf.MediascanConf, mode cli.OverwriteMode) error {
+	return writeAlbumYamlFiles(media_files.ScanFiles(conf), track_scanner.ScanTracks(conf), mode)
+}
+
+func writeAlbumYamlFiles(files []media_file.MediaFileData, tracks []track.Track, mode cli.OverwriteMode) error {
 	if mode != cli.SkipExisting && mode != cli.OverwriteExisting {
 		return fmt.Errorf("unsupported album YAML overwrite mode %d", mode)
 	}
-	genres := make(map[string][]string)
+
+	albums := make(map[string]*album.AlbumData)
+	var albumPaths []string
+	addMetadata := func(dir, name string, year int, genre string) {
+		data := albums[dir]
+		if data == nil {
+			data = &album.AlbumData{Name: name, DateReleased: date.Date{Y: year}}
+			albums[dir] = data
+			albumPaths = append(albumPaths, dir)
+		}
+		if genre != "" && !slices.Contains(data.Genres, genre) {
+			data.Genres = append(data.Genres, genre)
+		}
+	}
+
+	// Process YAML first so it supplies album-level fields and replaces tags
+	// from the media files it describes, without dropping unrelated media genres.
+	mediaPaths, sidecarStems := make(map[string]bool), make(map[string]bool)
+	for i, t := range tracks {
+		if t.Path == "" {
+			return fmt.Errorf("track YAML file %d is missing a path", i)
+		}
+		dir := filepath.Dir(t.Path)
+		data := t.TrackYamlFile.TrackData
+		addMetadata(dir, data.Album, data.Year, data.Genre)
+
+		hasMediaPath := false
+		for _, m := range t.TrackYamlFile.MediaFileData {
+			if m.Path == nil || *m.Path == "" {
+				continue
+			}
+			hasMediaPath = true
+			path := filepath.Clean(*m.Path)
+			if !filepath.IsAbs(path) {
+				path = filepath.Join(dir, path)
+			}
+			if filepath.Dir(path) == dir {
+				mediaPaths[path] = true
+			}
+		}
+		if !hasMediaPath {
+			sidecarStems[fileStem(filepath.Clean(t.Path))] = true
+		}
+	}
 	for i, m := range files {
 		if m.Path == nil || *m.Path == "" {
 			return fmt.Errorf("media file %d is missing a path", i)
 		}
-		albumPath := filepath.Dir(*m.Path)
-		if m.Genre != nil && *m.Genre != "" && !slices.Contains(genres[albumPath], *m.Genre) {
-			genres[albumPath] = append(genres[albumPath], *m.Genre)
-		}
-	}
-
-	seen := make(map[string]bool)
-	countCreated, countSkipped := 0, 0
-	for _, m := range files {
-		albumPath := filepath.Dir(*m.Path)
-		if seen[albumPath] {
+		path := filepath.Clean(*m.Path)
+		if mediaPaths[path] || sidecarStems[fileStem(path)] {
 			continue
 		}
-		seen[albumPath] = true
+		addMetadata(filepath.Dir(path), valueOrZero(m.Album), valueOrZero(m.Year), valueOrZero(m.Genre))
+	}
 
+	countCreated, countSkipped := 0, 0
+	for _, albumPath := range albumPaths {
 		path := filepath.Join(albumPath, "album.yml")
 		explicitCover := false
 		if mode == cli.OverwriteExisting {
@@ -84,19 +129,9 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData, mode cli.OverwriteMod
 				return fmt.Errorf("read existing %s to preserve explicitCover: %w", path, err)
 			}
 		}
-		albumYaml := album.AlbumYamlFile{
-			AlbumData: album.AlbumData{
-				Genres:        genres[albumPath],
-				DateReleased:  date.Date{},
-				ExplicitCover: explicitCover,
-			},
-		}
-		if m.Album != nil {
-			albumYaml.AlbumData.Name = *m.Album
-		}
-		if m.Year != nil {
-			albumYaml.AlbumData.DateReleased.Y = *m.Year
-		}
+		albumData := *albums[albumPath]
+		albumData.ExplicitCover = explicitCover
+		albumYaml := album.AlbumYamlFile{AlbumData: albumData}
 		data, err := yaml.Marshal(&albumYaml)
 		if err != nil {
 			return fmt.Errorf("marshal %s: %w", path, err)
@@ -128,7 +163,20 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData, mode cli.OverwriteMod
 	}
 
 	log.Printf("Scanned %d media files", len(files))
+	log.Printf("Scanned %d track YAML (.yml) files", len(tracks))
 	log.Printf("Written %d album YAML (.yml) files", countCreated)
 	log.Printf("Skipped %d album YAML (.yml) files (already exist)", countSkipped)
 	return nil
+}
+
+func fileStem(path string) string {
+	return strings.TrimSuffix(path, filepath.Ext(filepath.Base(path)))
+}
+
+func valueOrZero[T any](value *T) T {
+	if value != nil {
+		return *value
+	}
+	var zero T
+	return zero
 }

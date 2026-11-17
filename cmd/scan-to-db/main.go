@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	_ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
 
@@ -105,10 +106,19 @@ func scanIntoDB(sqliteDatabase *sql.DB, conf conf.MediascanConf) error {
 	createTableMediaFile(sqliteDatabase)
 
 	artists := artist_scanner.ScanArtists(conf)
-	for i := 0; i < len(artists); i++ {
-		a := artists[i]
+	for _, a := range artists {
 		data := a.ArtistYamlFile.ArtistData
-		insertArtist(sqliteDatabase, a.Path, data.ArtistNames[0], data.City, data.CountryCode, data.RegionCode, data.LanguageCodes[0])
+		name := filepath.Base(a.Path)
+		if len(data.ArtistNames) > 0 && data.ArtistNames[0] != "" {
+			name = data.ArtistNames[0]
+		}
+		var language string
+		if len(data.LanguageCodes) > 0 {
+			language = data.LanguageCodes[0]
+		}
+		if err := insertArtist(sqliteDatabase, a.Path, name, data.City, data.CountryCode, data.RegionCode, language, a.HasArtistYaml); err != nil {
+			return err
+		}
 	}
 
 	albums := album_scanner.ScanAlbums(conf)

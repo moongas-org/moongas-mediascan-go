@@ -85,18 +85,19 @@ mediaFileData:
 	}
 	for _, path := range []string{mp3Path, flacPath} {
 		var gotArtistPath, gotAlbumPath, gotTrackPath, service string
-		var hasSpotify bool
-		err := db.QueryRow(`SELECT a.path, b.path, t.path, s.streamingservice, t.hasspotify
+		var hasArtistYaml, hasAlbumYaml, hasSpotify bool
+		err := db.QueryRow(`SELECT a.path, a.hasartistyaml, b.path, b.hasalbumyaml, t.path, s.streamingservice, t.hasspotify
 				FROM mediafile m
 				JOIN artist a ON a.id = m.artistid
 				JOIN album b ON b.id = m.albumid AND b.artistid = a.id
 				JOIN track t ON t.id = m.trackid AND t.artistid = a.id AND t.albumid = b.id
 				JOIN trackstreaming s ON s.trackid = t.id WHERE m.path = ?`, path).
-			Scan(&gotArtistPath, &gotAlbumPath, &gotTrackPath, &service, &hasSpotify)
+			Scan(&gotArtistPath, &hasArtistYaml, &gotAlbumPath, &hasAlbumYaml, &gotTrackPath, &service, &hasSpotify)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if gotArtistPath != artistPath || gotAlbumPath != albumPath || gotTrackPath != trackPath || service != "spotify" || !hasSpotify {
+		if gotArtistPath != artistPath || !hasArtistYaml || gotAlbumPath != albumPath || !hasAlbumYaml ||
+			gotTrackPath != trackPath || service != "spotify" || !hasSpotify {
 			t.Fatalf("incorrect relationships for %s", path)
 		}
 	}
@@ -124,7 +125,7 @@ mediaFileData:
 	}
 }
 
-func TestScanIntoDBMissingRelationships(t *testing.T) {
+func TestScanIntoDBWithoutArtistOrAlbumYaml(t *testing.T) {
 	db := newTestDB(t)
 	root := t.TempDir()
 	dir := filepath.Join(root, "MissingArtist", "MissingAlbum")
@@ -151,29 +152,46 @@ func TestScanIntoDBMissingRelationships(t *testing.T) {
 	if err := scanIntoDB(db, conf.MediascanConf{MediaDirs: []string{root}, MediaExts: []string{".mp3"}}); err != nil {
 		t.Fatal(err)
 	}
+	var fallbackArtistID int64
+	var name string
+	var hasArtistYaml bool
+	if err := db.QueryRow("SELECT id, name, hasartistyaml FROM artist WHERE path = ?", filepath.Dir(dir)).
+		Scan(&fallbackArtistID, &name, &hasArtistYaml); err != nil {
+		t.Fatal(err)
+	}
+	if name != "MissingArtist" || hasArtistYaml {
+		t.Fatalf("unexpected fallback artist: name=%q hasartistyaml=%t", name, hasArtistYaml)
+	}
+	var fallbackAlbumID, albumArtistID int64
+	var hasAlbumYaml bool
+	if err := db.QueryRow("SELECT id, name, artistid, hasalbumyaml FROM album WHERE path = ?", dir).
+		Scan(&fallbackAlbumID, &name, &albumArtistID, &hasAlbumYaml); err != nil {
+		t.Fatal(err)
+	}
+	if name != "MissingAlbum" || albumArtistID != fallbackArtistID || hasAlbumYaml {
+		t.Fatalf("unexpected fallback album: name=%q artistid=%d hasalbumyaml=%t", name, albumArtistID, hasAlbumYaml)
+	}
 	var artistID, albumID, trackID sql.NullInt64
 	if err := db.QueryRow("SELECT artistid, albumid FROM track").Scan(&artistID, &albumID); err != nil {
 		t.Fatal(err)
 	}
-	if artistID.Valid || albumID.Valid {
-		t.Fatal("missing track parents must be NULL")
+	if !artistID.Valid || artistID.Int64 != fallbackArtistID || !albumID.Valid || albumID.Int64 != fallbackAlbumID {
+		t.Fatal("track must link to the fallback artist and album")
 	}
 	if err := db.QueryRow("SELECT artistid, albumid, trackid FROM mediafile").Scan(&artistID, &albumID, &trackID); err != nil {
 		t.Fatal(err)
 	}
-	if artistID.Valid || albumID.Valid || trackID.Valid {
-		t.Fatal("missing media-file relationships must be NULL, not matched by filename")
+	if !artistID.Valid || artistID.Int64 != fallbackArtistID || !albumID.Valid || albumID.Int64 != fallbackAlbumID || trackID.Valid {
+		t.Fatal("media file must link to the fallback artist and album, but not a track")
 	}
-	for _, warning := range []string{"WARNING: no artist row", "WARNING: no album row", "storing NULL trackid"} {
-		if !strings.Contains(logs.String(), warning) {
-			t.Errorf("missing warning %q", warning)
-		}
+	if !strings.Contains(logs.String(), "storing NULL trackid") {
+		t.Error("missing warning for unlinked media file")
 	}
 	var albums int
 	if err := db.QueryRow("SELECT COUNT(*) FROM album").Scan(&albums); err != nil {
 		t.Fatal(err)
 	}
-	if albums != 0 {
-		t.Fatal("must not create fallback albums from media files")
+	if albums != 1 {
+		t.Fatalf("got %d album rows, want one fallback album", albums)
 	}
 }
