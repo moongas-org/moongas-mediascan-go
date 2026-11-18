@@ -3,7 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +13,7 @@ import (
 )
 
 func createTableTrack(db *sql.DB) error {
-	log.Println("Create track table...")
+	slog.Info("Creating track table")
 	_, err := db.Exec(`CREATE TABLE track (
 		"id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
 		"path" TEXT UNIQUE,
@@ -43,7 +43,7 @@ func createTableTrack(db *sql.DB) error {
 			return fmt.Errorf("create track index: %w", err)
 		}
 	}
-	log.Println("track table created")
+	slog.Info("Created track table")
 	return nil
 }
 
@@ -78,7 +78,7 @@ func insertTracks(db *sql.DB, tracks []track.Track, mediaExts []string) error {
 		}
 		hasLyricsTxt := regularFileExists(basename + ".txt")
 		hasLyricsLrc := regularFileExists(basename + ".lrc")
-		log.Println("Inserting track record ...")
+		slog.Debug("Inserting track record", "path", t.Path)
 		_, err = db.Exec(`INSERT INTO track(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, artistid, albumid, hasspotify, hasmedia, haslyricstxt, haslyricslrc)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			t.Path, albumPath, filepath.Dir(albumPath), data.Title, data.Artist,
@@ -94,7 +94,7 @@ func regularFileExists(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			log.Printf("ERROR accessing %s: %v", path, err)
+			slog.Warn("Unable to access related track file", "path", path, "error", err)
 		}
 		return false
 	}
@@ -115,7 +115,7 @@ func displayTracks(db *sql.DB) error {
 		if err := rows.Scan(&id, &path, &albumPath, &artistPath, &title, &artist, &albumArtist, &album, &genre, &year, &artistID, &albumID, &hasSpotify, &hasMedia, &hasLyricsTxt, &hasLyricsLrc); err != nil {
 			return fmt.Errorf("scan track row: %w", err)
 		}
-		log.Println("track: ", id, " ", path, " ", albumPath, " ", artistPath, " ", title, " ", artist, " ", albumArtist, " ", album, " ", genre, " ", year, " artistid=", artistID, " albumid=", albumID, " hasspotify=", hasSpotify, " hasmedia=", hasMedia, " haslyricstxt=", hasLyricsTxt, " haslyricslrc=", hasLyricsLrc)
+		slog.Debug("Track row", "id", id, "path", path, "album_path", albumPath, "artist_path", artistPath, "title", title, "artist", artist, "album_artist", albumArtist, "album", album, "genre", genre, "year", year, "artist_id", artistID, "album_id", albumID, "has_spotify", hasSpotify, "has_media", hasMedia, "has_lyrics_txt", hasLyricsTxt, "has_lyrics_lrc", hasLyricsLrc)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read tracks: %w", err)

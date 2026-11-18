@@ -3,13 +3,13 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
 )
 
 func createTableTrackStreaming(db *sql.DB) error {
-	log.Println("Create trackstreaming table...")
+	slog.Info("Creating track streaming table")
 	_, err := db.Exec(`CREATE TABLE trackstreaming (
 		"trackid" INTEGER NOT NULL REFERENCES track(id),
 		"streamingservice" TEXT NOT NULL,
@@ -22,7 +22,7 @@ func createTableTrackStreaming(db *sql.DB) error {
 	if _, err := db.Exec("CREATE INDEX idx_trackstreaming_trackid ON trackstreaming (trackid)"); err != nil {
 		return fmt.Errorf("create trackstreaming index: %w", err)
 	}
-	log.Println("trackstreaming table created")
+	slog.Info("Created track streaming table")
 	return nil
 }
 
@@ -36,7 +36,7 @@ func insertTrackStreaming(db *sql.DB, tracks []track.Track) error {
 			return fmt.Errorf("find track ID for %s: %w", t.Path, err)
 		}
 		for _, streaming := range t.TrackYamlFile.TrackIDData.StreamingData {
-			log.Println("Inserting trackstreaming record ...")
+			slog.Debug("Inserting track streaming record", "track_path", t.Path, "service", streaming.StreamingService)
 			if _, err := db.Exec(`INSERT INTO trackstreaming(trackid, streamingservice, streamingtrackid, streamingtrackurl)
 				VALUES (?, ?, ?, ?)`, trackID, string(streaming.StreamingService), streaming.TrackID, streaming.TrackURL); err != nil {
 				return fmt.Errorf("insert streaming service %s for track %s: %w", streaming.StreamingService, t.Path, err)
@@ -58,7 +58,7 @@ func displayTrackStreaming(db *sql.DB) error {
 		if err := rows.Scan(&trackID, &service, &streamingTrackID, &streamingTrackURL); err != nil {
 			return fmt.Errorf("scan trackstreaming row: %w", err)
 		}
-		log.Println("trackstreaming: ", trackID, " ", service, " ", streamingTrackID, " ", streamingTrackURL)
+		slog.Debug("Track streaming row", "track_id", trackID, "service", service, "streaming_track_id", streamingTrackID, "streaming_track_url", streamingTrackURL)
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("read trackstreaming: %w", err)

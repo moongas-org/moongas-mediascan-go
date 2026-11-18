@@ -3,7 +3,7 @@ package cli
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -23,9 +23,9 @@ const (
 func LogCurrentDir() {
 	cwd, err := os.Getwd()
 	if err != nil {
-		log.Printf("Unable to determine current working directory: %v", err)
+		slog.Warn("Unable to determine current working directory", "error", err)
 	} else {
-		log.Printf("Current working directory: %s", cwd)
+		slog.Info("Current working directory", "path", cwd)
 	}
 }
 

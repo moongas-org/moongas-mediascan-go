@@ -2,7 +2,7 @@
 package album
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -29,14 +29,14 @@ func ScanAlbums(conf conf.MediascanConf) []album.Album {
 	}
 	for _, mediaDir := range conf.MediaDirs {
 		mediaDir = filepath.Clean(mediaDir)
-		log.Printf("Scanning album media dir: %s", mediaDir)
+		slog.Info("Scanning album media dir", "media_dir", mediaDir)
 		err := filepath.Walk(mediaDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				log.Printf("ERROR accessing %s: %v", path, err)
+				slog.Warn("Unable to access path", "path", path, "error", err)
 				return nil
 			}
 			if info == nil {
-				log.Printf("Skipping nil file info for %s", path)
+				slog.Debug("Skipping path with nil file info", "path", path)
 				return nil
 			}
 			if info.IsDir() {
@@ -51,31 +51,31 @@ func ScanAlbums(conf conf.MediascanConf) []album.Album {
 				return nil
 			}
 			if utils.ContainsAnyOf(path, conf.ExcludePaths) {
-				log.Printf("Skipping %s (ExcludePaths)", path)
+				slog.Debug("Skipping excluded path", "path", path)
 				return nil
 			}
 
-			log.Printf("Reading filepath %s", path)
+			slog.Debug("Reading filepath", "path", path)
 			if info.Mode()&os.ModeSymlink != 0 {
 				info, err = os.Stat(path)
 				if err != nil {
-					log.Printf("ERROR reading %s: %v", path, err)
+					slog.Warn("Unable to inspect album metadata", "path", path, "error", err)
 					return nil
 				}
 			}
 			if !info.Mode().IsRegular() {
-				log.Printf("Skipping %s (not a regular file)", path)
+				slog.Debug("Skipping non-regular album metadata file", "path", path)
 				return nil
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {
-				log.Printf("ERROR reading %s: %v", path, err)
+				slog.Warn("Unable to read album metadata", "path", path, "error", err)
 				return nil
 			}
 			a := album.Album{Path: filepath.Dir(path), HasAlbumYaml: true}
 			var file album.AlbumYamlFile
 			if err := yaml.Unmarshal(data, &file); err != nil {
-				log.Printf("ERROR parsing %s: %v", path, err)
+				slog.Warn("Unable to parse album metadata", "path", path, "error", err)
 			} else {
 				a.AlbumYamlFile = file
 			}
@@ -83,7 +83,7 @@ func ScanAlbums(conf conf.MediascanConf) []album.Album {
 			return nil
 		})
 		if err != nil {
-			log.Printf("ERROR scanning %s: %v", mediaDir, err)
+			slog.Error("Unable to scan media directory", "media_dir", mediaDir, "error", err)
 		}
 	}
 	return albums

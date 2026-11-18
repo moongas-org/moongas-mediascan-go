@@ -1,9 +1,13 @@
 package utils
 
-import "log"
+import (
+	"log/slog"
+	"os"
+)
 
 func Check(e error, msg string) {
 	if e != nil {
-		log.Fatalf("ERROR: %v (%v)", e, msg)
+		slog.Error("Operation failed", "message", msg, "error", e)
+		os.Exit(1)
 	}
 }

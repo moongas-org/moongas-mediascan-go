@@ -3,7 +3,8 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
@@ -30,14 +31,16 @@ func createTableMediaFile(db *sql.DB) {
 		"trackid" INTEGER REFERENCES track(id)
 	  );` // SQL Statement for Create Table
 
-	log.Println("Create mediafiles table...")
+	slog.Info("Creating mediafile table")
 	statement, err := db.Prepare(sql)
 	if err != nil {
-		log.Fatal(err.Error())
+		slog.Error("Unable to prepare mediafile table", "error", err)
+		os.Exit(1)
 	}
 	_, err = statement.Exec()
 	if err != nil {
-		log.Fatalln(err.Error())
+		slog.Error("Unable to create mediafile table", "error", err)
+		os.Exit(1)
 	}
 
 	// In SQLite, non-unique indexes are created using the standard CREATE INDEX statement,
@@ -45,28 +48,32 @@ func createTableMediaFile(db *sql.DB) {
 	sql = `CREATE INDEX idx_artistpath ON mediafile (artistpath);`
 	statement, err = db.Prepare(sql)
 	if err != nil {
-		log.Fatalln(err.Error())
+		slog.Error("Unable to prepare mediafile artist index", "error", err)
+		os.Exit(1)
 	}
 	_, err = statement.Exec()
 	if err != nil {
-		log.Fatalln(err.Error())
+		slog.Error("Unable to create mediafile artist index", "error", err)
+		os.Exit(1)
 	}
 
 	sql = `CREATE INDEX idx_albumpath ON mediafile (albumpath);`
 	statement, err = db.Prepare(sql)
 	if err != nil {
-		log.Fatalln(err.Error())
+		slog.Error("Unable to prepare mediafile album index", "error", err)
+		os.Exit(1)
 	}
 	_, err = statement.Exec()
 	if err != nil {
-		log.Fatalln(err.Error())
+		slog.Error("Unable to create mediafile album index", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("mediafiles table created")
+	slog.Info("Created mediafile table")
 }
 
 func insertMediaFile(db *sql.DB, path string, albumpath string, artistpath string, title string, artist string, albumartist string, album string, genre string, year int, size *int64, format *string, duration *float64, artistID, albumID, trackID sql.NullInt64) error {
-	log.Println("Inserting mediafile record ...")
+	slog.Debug("Inserting mediafile record", "path", path)
 	_, err := db.Exec(`INSERT INTO mediafile(path, albumpath, artistpath, title, artist, albumartist, album, genre, year, size, format, duration, artistid, albumid, trackid)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		path, albumpath, artistpath, title, artist, albumartist, album, genre, year, size, format, duration, artistID, albumID, trackID)
@@ -81,7 +88,7 @@ func insertMediaFiles(db *sql.DB, files []media_file.MediaFileData, tracks []tra
 	for _, t := range tracks {
 		for _, mf := range t.TrackYamlFile.MediaFileData {
 			if mf.Path == nil || *mf.Path == "" {
-				log.Printf("WARNING: mediaFileData entry in %s has no path; cannot link a media file", t.Path)
+				slog.Warn("Media file metadata has no path and cannot be linked", "track_path", t.Path)
 				continue
 			}
 			path := *mf.Path
@@ -123,7 +130,7 @@ func insertMediaFiles(db *sql.DB, files []media_file.MediaFileData, tracks []tra
 				return err
 			}
 		} else {
-			log.Printf("WARNING: no track mediaFileData path matches %s; storing NULL trackid", *mf.Path)
+			slog.Warn("No track media file path matches; storing NULL track ID", "path", *mf.Path)
 		}
 		if err := insertMediaFile(db, *mf.Path, albumPath, artistPath, *mf.Title, *mf.Artist,
 			*mf.AlbumArtist, *mf.Album, *mf.Genre, *mf.Year, mf.Size, mf.Format, mf.Duration, artistID, albumID, trackID); err != nil {
@@ -136,7 +143,8 @@ func insertMediaFiles(db *sql.DB, files []media_file.MediaFileData, tracks []tra
 func displayMediaFiles(db *sql.DB) {
 	row, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, size, format, duration, artistid, albumid, trackid FROM mediafile ORDER BY artist")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to query mediafiles", "error", err)
+		os.Exit(1)
 	}
 	defer row.Close()
 	for row.Next() {
@@ -156,13 +164,14 @@ func displayMediaFiles(db *sql.DB) {
 		var artistID, albumID, trackID sql.NullInt64
 		if err := row.Scan(&id, &path, &albumpath, &artistpath, &title, &artist, &albumartist, &album, &genre, &year,
 			&size, &format, &duration, &artistID, &albumID, &trackID); err != nil {
-			log.Fatal(err)
+			slog.Error("Unable to scan mediafile row", "error", err)
+			os.Exit(1)
 		}
-		log.Println("mediafile: ", id, " ", path, " ", albumpath, " ", artistpath, " ", title, " ", artist, " ", albumartist, " ", album, " ", genre, " ", year,
-			" size=", size, " format=", format, " duration=", duration, " artistid=", artistID, " albumid=", albumID, " trackid=", trackID)
+		slog.Debug("Mediafile row", "id", id, "path", path, "album_path", albumpath, "artist_path", artistpath, "title", title, "artist", artist, "album_artist", albumartist, "album", album, "genre", genre, "year", year, "size", size, "format", format, "duration", duration, "artist_id", artistID, "album_id", albumID, "track_id", trackID)
 
 	}
 	if err := row.Err(); err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to read mediafile rows", "error", err)
+		os.Exit(1)
 	}
 }

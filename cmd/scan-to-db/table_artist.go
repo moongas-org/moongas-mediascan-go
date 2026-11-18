@@ -3,7 +3,8 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 )
 
 func createTableArtist(db *sql.DB) {
@@ -18,20 +19,22 @@ func createTableArtist(db *sql.DB) {
 		"hasartistyaml" BOOLEAN NOT NULL DEFAULT FALSE
 	  );` // SQL Statement for Create Table
 
-	log.Println("Create artist table...")
+	slog.Info("Creating artist table")
 	statement, err := db.Prepare(sql) // Prepare SQL Statement
 	if err != nil {
-		log.Fatal(err.Error())
+		slog.Error("Unable to prepare artist table", "error", err)
+		os.Exit(1)
 	}
 	_, err = statement.Exec()
 	if err != nil {
-		log.Fatalln(err.Error())
+		slog.Error("Unable to create artist table", "error", err)
+		os.Exit(1)
 	}
-	log.Println("artist table created")
+	slog.Info("Created artist table")
 }
 
 func insertArtist(db *sql.DB, path string, name string, city string, countrycode string, regioncode string, languagecode string, hasArtistYaml bool) error {
-	log.Println("Inserting artist record ...")
+	slog.Debug("Inserting artist record", "path", path)
 	_, err := db.Exec(`INSERT INTO artist(path, name, city, countrycode, regioncode, languagecode, hasartistyaml)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`, path, name, city, countrycode, regioncode, languagecode, hasArtistYaml)
 	if err != nil {
@@ -43,7 +46,8 @@ func insertArtist(db *sql.DB, path string, name string, city string, countrycode
 func displayArtists(db *sql.DB) {
 	row, err := db.Query("SELECT id, path, name, city, countrycode, regioncode, languagecode, hasartistyaml FROM artist ORDER BY name")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to query artists", "error", err)
+		os.Exit(1)
 	}
 	defer row.Close()
 	for row.Next() { // Iterate and fetch the records from result cursor
@@ -56,11 +60,13 @@ func displayArtists(db *sql.DB) {
 		var languagecode string
 		var hasArtistYaml bool
 		if err := row.Scan(&id, &path, &name, &city, &countrycode, &regioncode, &languagecode, &hasArtistYaml); err != nil {
-			log.Fatal(err)
+			slog.Error("Unable to scan artist row", "error", err)
+			os.Exit(1)
 		}
-		log.Println("artist: ", id, " ", path, " ", name, " ", city, " ", countrycode, " ", regioncode, " ", languagecode, " hasartistyaml=", hasArtistYaml)
+		slog.Debug("Artist row", "id", id, "path", path, "name", name, "city", city, "country_code", countrycode, "region_code", regioncode, "language_code", languagecode, "has_artist_yaml", hasArtistYaml)
 	}
 	if err := row.Err(); err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to read artist rows", "error", err)
+		os.Exit(1)
 	}
 }

@@ -2,7 +2,7 @@ package album
 
 import (
 	"bytes"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -102,9 +102,9 @@ func TestScanAlbumsLogsErrorsAndContinues(t *testing.T) {
 		t.Fatal(err)
 	}
 	var output bytes.Buffer
-	original := log.Writer()
-	log.SetOutput(&output)
-	t.Cleanup(func() { log.SetOutput(original) })
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&output, nil)))
+	t.Cleanup(func() { slog.SetDefault(original) })
 
 	got := ScanAlbums(conf.MediascanConf{MediaDirs: []string{missing, root}})
 	want := []album.Album{
@@ -121,7 +121,7 @@ func TestScanAlbumsLogsErrorsAndContinues(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("albums = %+v, want %+v", got, want)
 	}
-	for _, message := range []string{"ERROR accessing " + missing, "ERROR parsing ", "ERROR reading "} {
+	for _, message := range []string{"Unable to access path", "Unable to parse album metadata", "Unable to inspect album metadata"} {
 		if !strings.Contains(output.String(), message) {
 			t.Errorf("missing log %q in %s", message, output.String())
 		}

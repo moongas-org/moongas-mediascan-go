@@ -2,7 +2,7 @@ package track
 
 import (
 	"bytes"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,14 +81,14 @@ func TestScanTracksLogsErrorsAndContinues(t *testing.T) {
 		t.Fatal(err)
 	}
 	var output bytes.Buffer
-	original := log.Writer()
-	log.SetOutput(&output)
-	t.Cleanup(func() { log.SetOutput(original) })
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&output, nil)))
+	t.Cleanup(func() { slog.SetDefault(original) })
 	got := ScanTracks(conf.MediascanConf{MediaDirs: []string{missing, root}})
 	if len(got) != 1 || filepath.Base(got[0].Path) != "valid.yml" {
 		t.Fatalf("expected valid track despite failures: %+v", got)
 	}
-	for _, message := range []string{"ERROR accessing ", "ERROR reading ", "ERROR parsing ", "missing required field"} {
+	for _, message := range []string{"Unable to access path", "Unable to read track metadata", "Unable to parse track metadata", "missing required field"} {
 		if !strings.Contains(output.String(), message) {
 			t.Errorf("missing log %q in %s", message, output.String())
 		}

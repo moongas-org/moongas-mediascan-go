@@ -2,12 +2,13 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/logging"
 	media_file_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/utils"
@@ -15,13 +16,14 @@ import (
 )
 
 func main() {
+	logging.Init()
 	cli.LogCurrentDir()
 
 	overwriteMode, args, err := cli.ParseCommandArgs(os.Args, 1, 2)
 	if err != nil {
-		log.Println("Error:", err)
-		log.Println("Usage: go run cmd/scan-to-track-yaml <config-yaml> [media-root] [--overwrite-existing|--overwrite-newer]")
-		log.Println("Example: go run cmd/scan-to-track-yaml mediascan-config.yml /path/to/root --overwrite-existing")
+		slog.Error("Invalid command-line arguments", "error", err)
+		slog.Info("Usage: go run cmd/scan-to-track-yaml <config-yaml> [media-root] [--overwrite-existing|--overwrite-newer]")
+		slog.Info("Example: go run cmd/scan-to-track-yaml mediascan-config.yml /path/to/root --overwrite-existing")
 		os.Exit(1)
 	}
 	configYamlFilepath := args[0]
@@ -32,7 +34,7 @@ func main() {
 
 	conf, err := cli.ResolveScanConfig(configYamlFilepath, mediaRootDir)
 	if err != nil {
-		log.Printf("ERROR: %v", err)
+		slog.Error("Unable to resolve scan configuration", "error", err)
 		os.Exit(1)
 	}
 
@@ -46,11 +48,11 @@ func main() {
 		if _, err := os.Stat(trackYamlFilepath); err == nil {
 			shouldOverwrite, err := cli.ShouldOverwriteFile(trackYamlFilepath, *m.Path, overwriteMode)
 			if err != nil {
-				log.Printf("ERROR: %v", err)
+				slog.Warn("Unable to check whether track YAML should be overwritten", "path", trackYamlFilepath, "error", err)
 				continue
 			}
 			if !shouldOverwrite {
-				log.Printf("Skipping %s (%s already exists)", *m.Path, trackYamlFilepath)
+				slog.Debug("Skipping media file because track YAML already exists", "path", *m.Path, "track_yaml", trackYamlFilepath)
 				countSkipped += 1
 				continue
 			}
@@ -70,11 +72,11 @@ func main() {
 		utils.Check(err, trackYamlFilepath)
 		err = os.WriteFile(trackYamlFilepath, yamlData, 0644)
 		utils.Check(err, trackYamlFilepath)
-		log.Printf("Created %s", trackYamlFilepath)
+		slog.Debug("Created track YAML", "path", trackYamlFilepath)
 		countCreated += 1
 	}
 
-	log.Printf("Scanned %d media files", len(files))
-	log.Printf("Created %d track YAML (.yml) files", countCreated)
-	log.Printf("Skipped %d track YAML (.yml) files (already exist)", countSkipped)
+	slog.Info("Scanned media files", "count", len(files))
+	slog.Info("Created track YAML files", "count", countCreated)
+	slog.Info("Skipped track YAML files", "count", countSkipped)
 }

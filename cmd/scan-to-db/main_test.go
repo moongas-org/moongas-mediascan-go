@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"database/sql"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +11,13 @@ import (
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/conf"
 )
+
+func captureSlog(t *testing.T, output *bytes.Buffer) {
+	t.Helper()
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(output, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+}
 
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -77,9 +84,7 @@ mediaFileData:
 	write(mp3Path, "unreadable audio tags")
 	write(flacPath, "unreadable audio tags")
 	var logs bytes.Buffer
-	previous := log.Writer()
-	log.SetOutput(&logs)
-	defer log.SetOutput(previous)
+	captureSlog(t, &logs)
 	if err := scanIntoDB(db, conf.MediascanConf{MediaDirs: []string{root}, MediaExts: []string{".mp3", ".flac"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -104,15 +109,15 @@ mediaFileData:
 	if err := displayTracks(db); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(logs.String(), "hasspotify= true") {
+	if !strings.Contains(logs.String(), "has_spotify=true") {
 		t.Fatal("displayed track must include hasspotify")
 	}
 	last := -1
 	for _, phase := range []string{
-		"Scanning artist media dir:", "Inserting artist record",
-		"Scanning album media dir:", "Inserting album record",
-		"Scanning track media dir:", "Inserting track record",
-		"Inserting trackstreaming record", "Scanning file media dir:", "Inserting mediafile record",
+		"Scanning artist media dir", "Inserting artist record",
+		"Scanning album media dir", "Inserting album record",
+		"Scanning track media dir", "Inserting track record",
+		"Inserting track streaming record", "Scanning file media dir", "Inserting mediafile record",
 	} {
 		index := strings.Index(logs.String(), phase)
 		if index <= last {
@@ -120,7 +125,7 @@ mediaFileData:
 		}
 		last = index
 	}
-	if strings.Count(logs.String(), "Scanning track media dir:") != 1 {
+	if strings.Count(logs.String(), "Scanning track media dir") != 1 {
 		t.Fatal("ScanTracks must run once")
 	}
 }
@@ -146,9 +151,7 @@ func TestScanIntoDBWithoutArtistOrAlbumYaml(t *testing.T) {
 		t.Fatal(err)
 	}
 	var logs bytes.Buffer
-	previous := log.Writer()
-	log.SetOutput(&logs)
-	defer log.SetOutput(previous)
+	captureSlog(t, &logs)
 	if err := scanIntoDB(db, conf.MediascanConf{MediaDirs: []string{root}, MediaExts: []string{".mp3"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +187,7 @@ func TestScanIntoDBWithoutArtistOrAlbumYaml(t *testing.T) {
 	if !artistID.Valid || artistID.Int64 != fallbackArtistID || !albumID.Valid || albumID.Int64 != fallbackAlbumID || trackID.Valid {
 		t.Fatal("media file must link to the fallback artist and album, but not a track")
 	}
-	if !strings.Contains(logs.String(), "storing NULL trackid") {
+	if !strings.Contains(logs.String(), "storing NULL ID") {
 		t.Error("missing warning for unlinked media file")
 	}
 	var albums int

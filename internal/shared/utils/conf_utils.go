@@ -3,7 +3,7 @@ package utils
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -14,9 +14,10 @@ import (
 func LoadConf(configYamlFilepath string) (configuration conf.MediascanConf) {
 	configYamlAbsFilepath, err := filepath.Abs(configYamlFilepath)
 	if err != nil {
-		log.Fatalf("Failed to get absolute path to yaml config file: %v", err)
+		slog.Error("Failed to get absolute path to YAML config file", "error", err)
+		os.Exit(1)
 	} else {
-		log.Printf("Loading config from yaml file: %v", configYamlAbsFilepath)
+		slog.Info("Loading config from YAML file", "path", configYamlAbsFilepath)
 	}
 	yfile, err := os.ReadFile(configYamlAbsFilepath)
 	Check(err, configYamlAbsFilepath)
@@ -33,14 +34,14 @@ func ResolveMediaDirs(mediaRootDir string, mediaDirs []string) ([]string, error)
 			return nil, fmt.Errorf("failed to determine current working directory: %w", err)
 		}
 		rootAbs = cwd
-		log.Printf("Using current working directory as media root: %s", rootAbs)
+		slog.Info("Using current working directory as media root", "path", rootAbs)
 	} else {
 		var err error
 		rootAbs, err = filepath.Abs(mediaRootDir)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve mediaRootdir %q: %w", mediaRootDir, err)
 		}
-		log.Printf("Using mediaRootdir: %s", rootAbs)
+		slog.Info("Using media root directory", "path", rootAbs)
 	}
 
 	if _, err := os.Stat(rootAbs); err != nil {
@@ -62,7 +63,7 @@ func ResolveMediaDirs(mediaRootDir string, mediaDirs []string) ([]string, error)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve mediaDir %q: %w", mediaDir, err)
 		}
-		log.Printf("MediaDir %q resolved to %s", mediaDir, resolvedPath)
+		slog.Debug("Resolved media directory", "media_dir", mediaDir, "path", resolvedPath)
 		if _, err := os.Stat(resolvedPath); err != nil {
 			if os.IsNotExist(err) {
 				return nil, fmt.Errorf("media dir does not exist: %s", resolvedPath)

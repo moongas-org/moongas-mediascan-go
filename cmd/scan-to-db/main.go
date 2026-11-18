@@ -9,13 +9,14 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 
 	_ "github.com/mattn/go-sqlite3" // Import go-sqlite3 library
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/logging"
 	album_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/album"
 	artist_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/artist"
 	media_file_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
@@ -24,6 +25,7 @@ import (
 )
 
 func main() {
+	logging.Init()
 	cli.LogCurrentDir()
 
 	overwriteMode, args, err := cli.ParseCommandArgs(os.Args, 2, 3)
@@ -42,54 +44,60 @@ func main() {
 
 	conf, err := cli.ResolveScanConfig(configYamlFilepath, mediaRootDir)
 	if err != nil {
-		log.Printf("ERROR: %v", err)
+		slog.Error("Unable to resolve scan configuration", "error", err)
 		os.Exit(1)
 	}
 
 	outputDBAbsFilepath, err := cli.ResolveOutputAbsPath(outputDBFilepath)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to resolve output path", "error", err)
+		os.Exit(1)
 	}
 
 	if _, err := os.Stat(outputDBFilepath); err == nil {
 		shouldOverwrite, err := cli.ShouldOverwriteFile(outputDBFilepath, "", overwriteMode)
 		if err != nil {
-			log.Fatal(err)
+			slog.Error("Unable to check whether database should be overwritten", "path", outputDBFilepath, "error", err)
+			os.Exit(1)
 		}
 		if !shouldOverwrite {
-			log.Printf("Skipping existing database %s", outputDBFilepath)
+			slog.Info("Skipping existing database", "path", outputDBFilepath)
 			return
 		}
 	}
 
 	os.Remove(outputDBFilepath)
 
-	log.Printf("Creating %s...", outputDBFilepath)
+	slog.Info("Creating database", "path", outputDBFilepath)
 	file, err := os.Create(outputDBFilepath)
 	if err != nil {
-		log.Fatal(err.Error())
+		slog.Error("Unable to create database", "path", outputDBFilepath, "error", err)
+		os.Exit(1)
 	}
 	file.Close()
-	log.Printf("%s created", outputDBFilepath)
+	slog.Info("Created database", "path", outputDBFilepath)
 
 	sqliteDatabase, _ := sql.Open("sqlite3", outputDBFilepath)
 	defer sqliteDatabase.Close()
 	if err := scanIntoDB(sqliteDatabase, conf); err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to scan media into database", "error", err)
+		os.Exit(1)
 	}
 
 	// DISPLAY INSERTED RECORDS
 	displayArtists(sqliteDatabase)
 	displayAlbums(sqliteDatabase)
 	if err := displayTracks(sqliteDatabase); err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to display tracks", "error", err)
+		os.Exit(1)
 	}
 	if err := displayTrackStreaming(sqliteDatabase); err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to display track streaming data", "error", err)
+		os.Exit(1)
 	}
 	displayMediaFiles(sqliteDatabase)
 
-	log.Printf("Written to file %s", outputDBAbsFilepath)
+	slog.Info("Wrote database file", "path", outputDBAbsFilepath)
 }
 
 func scanIntoDB(sqliteDatabase *sql.DB, conf conf.MediascanConf) error {

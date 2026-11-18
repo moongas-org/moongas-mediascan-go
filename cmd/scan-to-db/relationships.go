@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 )
 
 func rowIDByPath(db *sql.DB, table, path string) (sql.NullInt64, error) {
@@ -22,7 +22,7 @@ func rowIDByPath(db *sql.DB, table, path string) (sql.NullInt64, error) {
 	var id sql.NullInt64
 	if err := db.QueryRow(query, path).Scan(&id); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			log.Printf("WARNING: no %s row for %s; storing NULL %sid", table, path, table)
+			slog.Warn("Related row not found; storing NULL ID", "table", table, "path", path)
 			return sql.NullInt64{}, nil
 		}
 		return sql.NullInt64{}, fmt.Errorf("find %s ID for %s: %w", table, path, err)

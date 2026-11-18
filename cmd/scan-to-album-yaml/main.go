@@ -4,13 +4,14 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/logging"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
 	track_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/track"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/album"
@@ -22,17 +23,18 @@ import (
 )
 
 func main() {
+	logging.Init()
 	cli.LogCurrentDir()
 
 	mode, args, err := cli.ParseCommandArgs(os.Args, 1, 2)
 	if err != nil || mode == cli.OverwriteNewer {
 		if err != nil {
-			log.Println("Error:", err)
+			slog.Error("Invalid command-line arguments", "error", err)
 		} else {
-			log.Println("Error: --overwrite-newer is not supported; use --overwrite-existing")
+			slog.Error("--overwrite-newer is not supported; use --overwrite-existing")
 		}
-		log.Println("Usage: go run ./cmd/scan-to-album-yaml <config-yaml> [media-root] [--overwrite-existing]")
-		log.Println("Existing album.yml files are preserved by default. Add --overwrite-existing to replace them with generated metadata.")
+		slog.Info("Usage: go run ./cmd/scan-to-album-yaml <config-yaml> [media-root] [--overwrite-existing]")
+		slog.Info("Existing album.yml files are preserved by default. Add --overwrite-existing to replace them with generated metadata.")
 		os.Exit(1)
 	}
 	mediaRootDir := ""
@@ -42,11 +44,13 @@ func main() {
 
 	conf, err := cli.ResolveScanConfig(args[0], mediaRootDir)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to resolve scan configuration", "error", err)
+		os.Exit(1)
 	}
 
 	if err := scanToAlbumYaml(conf, mode); err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to write album YAML files", "error", err)
+		os.Exit(1)
 	}
 }
 
@@ -143,7 +147,7 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData, tracks []track.Track,
 		}
 		file, err := os.OpenFile(path, flags, 0o644)
 		if os.IsExist(err) {
-			log.Printf("Skipping %s (already exists)", path)
+			slog.Debug("Skipping existing album YAML", "path", path)
 			countSkipped++
 			continue
 		}
@@ -158,14 +162,14 @@ func writeAlbumYamlFiles(files []media_file.MediaFileData, tracks []track.Track,
 		if closeErr != nil {
 			return fmt.Errorf("close %s: %w", path, closeErr)
 		}
-		log.Printf("Written %s", path)
+		slog.Debug("Wrote album YAML", "path", path)
 		countCreated++
 	}
 
-	log.Printf("Scanned %d media files", len(files))
-	log.Printf("Scanned %d track YAML (.yml) files", len(tracks))
-	log.Printf("Written %d album YAML (.yml) files", countCreated)
-	log.Printf("Skipped %d album YAML (.yml) files (already exist)", countSkipped)
+	slog.Info("Scanned media files", "count", len(files))
+	slog.Info("Scanned track YAML files", "count", len(tracks))
+	slog.Info("Wrote album YAML files", "count", countCreated)
+	slog.Info("Skipped existing album YAML files", "count", countSkipped)
 	return nil
 }
 

@@ -4,7 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/logging"
 	media_file_scanner "github.com/moongas-org/moongas-mediascan-go/internal/shared/scanner/media_files"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"gopkg.in/yaml.v3"
@@ -23,13 +24,14 @@ type fpcalcOutput struct {
 }
 
 func main() {
+	logging.Init()
 	cli.LogCurrentDir()
 
 	overwriteMode, args, err := cli.ParseCommandArgs(os.Args, 1, 2)
 	if err != nil {
-		log.Println("Error:", err)
-		log.Println("Usage: go run cmd/fpcalc-to-track-yaml <config-yaml> [media-root] [--overwrite-existing|--overwrite-newer]")
-		log.Println("Example: go run cmd/fpcalc-to-track-yaml mediascan-config.yml /path/to/root --overwrite-existing")
+		slog.Error("Invalid command-line arguments", "error", err)
+		slog.Info("Usage: go run cmd/fpcalc-to-track-yaml <config-yaml> [media-root] [--overwrite-existing|--overwrite-newer]")
+		slog.Info("Example: go run cmd/fpcalc-to-track-yaml mediascan-config.yml /path/to/root --overwrite-existing")
 		os.Exit(1)
 	}
 	mediaRootDir := ""
@@ -39,7 +41,7 @@ func main() {
 
 	conf, err := cli.ResolveScanConfig(args[0], mediaRootDir)
 	if err != nil {
-		log.Printf("ERROR: %v", err)
+		slog.Error("Unable to resolve scan configuration", "error", err)
 		os.Exit(1)
 	}
 
@@ -53,60 +55,60 @@ func main() {
 		yamlData, err := os.ReadFile(trackYamlPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				log.Printf("Skipping %s (no associated track YAML)", *mediaFile.Path)
+				slog.Debug("Skipping media file without associated track YAML", "path", *mediaFile.Path)
 				countSkipped++
 				continue
 			}
-			log.Printf("ERROR reading %s: %v", trackYamlPath, err)
+			slog.Warn("Unable to read track YAML", "path", trackYamlPath, "error", err)
 			countFailed++
 			continue
 		}
 
 		needsFpcalc, err := needsFpcalcData(yamlData)
 		if err != nil {
-			log.Printf("ERROR reading fpcalc data from %s: %v", trackYamlPath, err)
+			slog.Warn("Unable to read fpcalc data", "path", trackYamlPath, "error", err)
 			countFailed++
 			continue
 		}
 		if !needsFpcalc && overwriteMode != cli.SkipExisting {
 			needsFpcalc, err = cli.ShouldOverwriteFile(trackYamlPath, *mediaFile.Path, overwriteMode)
 			if err != nil {
-				log.Printf("ERROR checking overwrite for %s: %v", trackYamlPath, err)
+				slog.Warn("Unable to check whether track YAML should be overwritten", "path", trackYamlPath, "error", err)
 				countFailed++
 				continue
 			}
 		}
 		if !needsFpcalc {
-			log.Printf("Skipping %s (fpcalc data already exists)", trackYamlPath)
+			slog.Debug("Skipping track YAML with existing fpcalc data", "path", trackYamlPath)
 			countSkipped++
 			continue
 		}
 
 		fpcalcData, err := runFpcalc(*mediaFile.Path)
 		if err != nil {
-			log.Printf("ERROR running fpcalc for %s: %v", *mediaFile.Path, err)
+			slog.Warn("Unable to run fpcalc", "path", *mediaFile.Path, "error", err)
 			countFailed++
 			continue
 		}
 		updated, err := updateTrackYamlFile(trackYamlPath, yamlData, fpcalcData)
 		if err != nil {
-			log.Printf("ERROR updating %s: %v", trackYamlPath, err)
+			slog.Warn("Unable to update track YAML", "path", trackYamlPath, "error", err)
 			countFailed++
 			continue
 		}
 		if updated {
-			log.Printf("Updated %s", trackYamlPath)
+			slog.Debug("Updated track YAML", "path", trackYamlPath)
 			countUpdated++
 		} else {
 			countSkipped++
 		}
 	}
 
-	log.Printf("Scanned %d media files", len(files))
-	log.Printf("Updated %d track YAML (.yml) files", countUpdated)
-	log.Printf("Skipped %d media files", countSkipped)
+	slog.Info("Scanned media files", "count", len(files))
+	slog.Info("Updated track YAML files", "count", countUpdated)
+	slog.Info("Skipped media files", "count", countSkipped)
 	if countFailed > 0 {
-		log.Printf("Failed to update %d track YAML (.yml) files", countFailed)
+		slog.Error("Failed to update track YAML files", "count", countFailed)
 		os.Exit(1)
 	}
 }

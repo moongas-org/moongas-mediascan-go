@@ -2,9 +2,8 @@
 package media_files
 
 import (
-	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -21,7 +20,7 @@ import (
 func closeFile(f *os.File) {
 	err := f.Close()
 	if err != nil {
-		log.Printf("ERROR: Failed to close file %v\n", err)
+		slog.Error("Failed to close file", "error", err)
 		os.Exit(1)
 	}
 }
@@ -30,7 +29,7 @@ func getMp3Duration(path string) (duration float64) {
 	t := 0.0
 	r, err := os.Open(path)
 	if err != nil {
-		log.Printf("getMp3Duration error: %v", err)
+		slog.Warn("Unable to open MP3 to determine duration", "path", path, "error", err)
 		return 0.0
 	}
 	d := mp3.NewDecoder(r)
@@ -41,7 +40,7 @@ func getMp3Duration(path string) (duration float64) {
 			if err == io.EOF {
 				break
 			}
-			fmt.Println(err)
+			slog.Warn("Unable to decode MP3 frame", "path", path, "error", err)
 			return 0.0
 		}
 		t = t + f.Duration().Seconds()
@@ -56,18 +55,18 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 	countSkipped := 0
 	for _, mediaDir := range conf.MediaDirs {
 		if _, err := os.Stat(mediaDir); err != nil {
-			log.Printf("ERROR: mediaDir does not exist or could not be accessed: %s (%v)", mediaDir, err)
+			slog.Warn("Media directory does not exist or could not be accessed", "media_dir", mediaDir, "error", err)
 			continue
 		}
-		log.Printf("Scanning file media dir: %s", mediaDir)
+		slog.Info("Scanning file media dir", "media_dir", mediaDir)
 		err := filepath.Walk(mediaDir,
 			func(path string, info os.FileInfo, err error) error {
 				if err != nil {
-					log.Printf("ERROR accessing %s: %v", path, err)
+					slog.Warn("Unable to access path", "path", path, "error", err)
 					return nil
 				}
 				if info == nil {
-					log.Printf("Skipping nil file info for %s", path)
+					slog.Debug("Skipping path with nil file info", "path", path)
 					return nil
 				}
 
@@ -86,7 +85,7 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 				name := strings.TrimSuffix(info.Name(), ext)
 				m.Title = utils.Pointer(name)
 
-				log.Printf("Reading filepath %s", path)
+				slog.Debug("Reading filepath", "path", path)
 				if info.IsDir() {
 					return nil
 				}
@@ -95,7 +94,7 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 				}
 
 				if utils.ContainsAnyOf(path, conf.ExcludePaths) {
-					log.Printf("Skipping %s (ExcludePaths)", path)
+					slog.Debug("Skipping excluded path", "path", path)
 					countSkipped += 1
 					return nil
 				}
@@ -107,30 +106,30 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 				tags, err2 := tag.ReadFrom(f)
 				if err2 != nil {
 					countTagsFailed += 1
-					//log.Printf("ERROR reading tags: %v", err2)
+					slog.Debug("Unable to read media tags", "path", path, "error", err2)
 				} else {
 					if utils.ContainsAnyOf(tags.Title(), conf.ExcludeTitle) {
-						log.Printf("Skipping %s (ExcludeTitle %s)", path, tags.Title())
+						slog.Debug("Skipping media file excluded by title", "path", path, "title", tags.Title())
 						countSkipped += 1
 						return nil
 					}
 					if utils.ContainsAnyOf(tags.Artist(), conf.ExcludeArtist) {
-						log.Printf("Skipping %s (ExcludeArtist %s)", path, tags.Artist())
+						slog.Debug("Skipping media file excluded by artist", "path", path, "artist", tags.Artist())
 						countSkipped += 1
 						return nil
 					}
 					if utils.ContainsAnyOf(tags.AlbumArtist(), conf.ExcludeArtist) {
-						log.Printf("Skipping %s (ExcludeAlbumArtist %s)", path, tags.AlbumArtist())
+						slog.Debug("Skipping media file excluded by album artist", "path", path, "album_artist", tags.AlbumArtist())
 						countSkipped += 1
 						return nil
 					}
 					if utils.ContainsAnyOf(tags.Album(), conf.ExcludeAlbum) {
-						log.Printf("Skipping %s (ExcludeAlbum %s)", path, tags.Album())
+						slog.Debug("Skipping media file excluded by album", "path", path, "album", tags.Album())
 						countSkipped += 1
 						return nil
 					}
 					if utils.ContainsAnyOf(tags.Genre(), conf.ExcludeGenre) {
-						log.Printf("Skipping %s (ExcludeGenre %s)", path, tags.Genre())
+						slog.Debug("Skipping media file excluded by genre", "path", path, "genre", tags.Genre())
 						countSkipped += 1
 						return nil
 					}
@@ -153,7 +152,7 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 				return nil
 			})
 		if err != nil {
-			log.Printf("ERROR loading file: %v", err)
+			slog.Error("Unable to scan media directory", "error", err)
 			countLoadFailed += 1
 		}
 	}
@@ -169,21 +168,21 @@ func ScanFiles(conf conf.MediascanConf) []media_file.MediaFileData {
 		})
 	}
 
-	log.Printf("Successfully loaded %d media files", len(files))
+	slog.Info("Successfully loaded media files", "count", len(files))
 	if countLoadFailed > 0 {
-		log.Printf("Failed to load for %d media files", countLoadFailed)
+		slog.Warn("Failed to load media files", "count", countLoadFailed)
 	}
 	if countTagsFailed > 0 {
-		log.Printf("Failed to read tags for %d media files", countTagsFailed)
+		slog.Warn("Failed to read tags for media files", "count", countTagsFailed)
 	}
 	if countSkipped > 0 {
-		log.Printf("Skipped %d media files", countSkipped)
+		slog.Info("Skipped media files", "count", countSkipped)
 	}
 	if countTagsFailed > 0 {
-		log.Printf("Failed to load tags for %d media files", countTagsFailed)
+		slog.Warn("Failed to load tags for media files", "count", countTagsFailed)
 	}
 	if countSkipped > 0 {
-		log.Printf("Skipped %d excluded media files", countSkipped)
+		slog.Info("Skipped excluded media files", "count", countSkipped)
 	}
 	return files
 }

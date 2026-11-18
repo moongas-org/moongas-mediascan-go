@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -245,9 +244,7 @@ func TestInsertTracksDetectsLyrics(t *testing.T) {
 					link(filepath.Base(lyricsPath))
 				}
 				var logs bytes.Buffer
-				previous := log.Writer()
-				log.SetOutput(&logs)
-				t.Cleanup(func() { log.SetOutput(previous) })
+				captureSlog(t, &logs)
 				if err := insertTracks(db, []track.Track{{Path: path}}, nil); err != nil {
 					t.Fatal(err)
 				}
@@ -266,14 +263,14 @@ func TestInsertTracksDetectsLyrics(t *testing.T) {
 					t.Fatal(err)
 				}
 				for _, expected := range []string{
-					fmt.Sprintf("haslyricstxt= %t", wantTxt),
-					fmt.Sprintf("haslyricslrc= %t", wantLrc),
+					fmt.Sprintf("has_lyrics_txt=%t", wantTxt),
+					fmt.Sprintf("has_lyrics_lrc=%t", wantLrc),
 				} {
 					if !strings.Contains(logs.String(), expected) {
 						t.Errorf("missing %q in track display", expected)
 					}
 				}
-				if scenario.kind == "loop" && !strings.Contains(logs.String(), "ERROR accessing "+lyricsPath) {
+				if scenario.kind == "loop" && !strings.Contains(logs.String(), "Unable to access related track file") {
 					t.Fatalf("expected lyrics access error in logs, got %s", logs.String())
 				}
 			})
@@ -337,9 +334,7 @@ func TestInsertTracksDetectsMedia(t *testing.T) {
 				}
 			}
 			var logs bytes.Buffer
-			previous := log.Writer()
-			log.SetOutput(&logs)
-			t.Cleanup(func() { log.SetOutput(previous) })
+			captureSlog(t, &logs)
 			path := filepath.Join(dir, "song.live.yml")
 			if err := insertTracks(db, []track.Track{{Path: path}}, tt.extensions); err != nil {
 				t.Fatal(err)
@@ -351,7 +346,7 @@ func TestInsertTracksDetectsMedia(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("hasmedia = %t, want %t", got, tt.want)
 			}
-			if tt.name == "access-error-continues" && !strings.Contains(logs.String(), "ERROR accessing "+filepath.Join(dir, "song.live.mp3")) {
+			if tt.name == "access-error-continues" && !strings.Contains(logs.String(), "Unable to access related track file") {
 				t.Fatalf("expected media access error in logs, got %s", logs.String())
 			}
 		})
@@ -397,13 +392,11 @@ func TestScannedTracksHaveMedia(t *testing.T) {
 		}
 	}
 	var logs bytes.Buffer
-	previous := log.Writer()
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(previous) })
+	captureSlog(t, &logs)
 	if err := displayTracks(db); err != nil {
 		t.Fatal(err)
 	}
-	for _, expected := range []string{"hasmedia= true", "hasmedia= false"} {
+	for _, expected := range []string{"has_media=true", "has_media=false"} {
 		if !strings.Contains(logs.String(), expected) {
 			t.Errorf("missing %q in track display", expected)
 		}

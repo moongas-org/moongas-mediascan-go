@@ -2,7 +2,7 @@
 package track
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,14 +18,14 @@ import (
 func ScanTracks(conf conf.MediascanConf) []track.Track {
 	var tracks []track.Track
 	for _, mediaDir := range conf.MediaDirs {
-		log.Printf("Scanning track media dir: %s", mediaDir)
+		slog.Info("Scanning track media dir", "media_dir", mediaDir)
 		err := filepath.Walk(mediaDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				log.Printf("ERROR accessing %s: %v", path, err)
+				slog.Warn("Unable to access path", "path", path, "error", err)
 				return nil
 			}
 			if info == nil {
-				log.Printf("Skipping nil file info for %s", path)
+				slog.Debug("Skipping path with nil file info", "path", path)
 				return nil
 			}
 			relative, err := filepath.Rel(mediaDir, path)
@@ -44,25 +44,25 @@ func ScanTracks(conf conf.MediascanConf) []track.Track {
 				return nil
 			}
 			if utils.ContainsAnyOf(path, conf.ExcludePaths) {
-				log.Printf("Skipping %s (ExcludePaths)", path)
+				slog.Debug("Skipping excluded path", "path", path)
 				return nil
 			}
-			log.Printf("Reading filepath %s", path)
+			slog.Debug("Reading filepath", "path", path)
 			data, err := os.ReadFile(path)
 			if err != nil {
-				log.Printf("ERROR reading %s: %v", path, err)
+				slog.Warn("Unable to read track metadata", "path", path, "error", err)
 				return nil
 			}
 			var file track.TrackYamlFile
 			if err := yaml.Unmarshal(data, &file); err != nil {
-				log.Printf("ERROR parsing %s: %v", path, err)
+				slog.Warn("Unable to parse track metadata", "path", path, "error", err)
 				return nil
 			}
 			tracks = append(tracks, track.Track{TrackYamlFile: file, Path: path})
 			return nil
 		})
 		if err != nil {
-			log.Printf("ERROR scanning %s: %v", mediaDir, err)
+			slog.Error("Unable to scan media directory", "media_dir", mediaDir, "error", err)
 		}
 	}
 	return tracks

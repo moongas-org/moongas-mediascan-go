@@ -3,14 +3,15 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
+	"log/slog"
+	"os"
 	"path/filepath"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/album"
 )
 
 func createTableAlbum(db *sql.DB) error {
-	log.Println("Create album table...")
+	slog.Info("Creating album table")
 	_, err := db.Exec(`CREATE TABLE album (
 		"id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
 		"path" TEXT UNIQUE,
@@ -24,7 +25,7 @@ func createTableAlbum(db *sql.DB) error {
 	if err != nil {
 		return fmt.Errorf("create album table: %w", err)
 	}
-	log.Println("album table created")
+	slog.Info("Created album table")
 	return nil
 }
 
@@ -53,7 +54,7 @@ func insertAlbums(db *sql.DB, albums []album.Album) error {
 			return err
 		}
 
-		log.Println("Inserting album record ...")
+		slog.Debug("Inserting album record", "path", albumPath)
 		_, err = db.Exec(`INSERT INTO album(path, name, year, explicitcover, artistid, genre, hasalbumyaml) VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			albumPath, name, albumData.DateReleased.Y, albumData.ExplicitCover, artistID, genre, a.HasAlbumYaml)
 		if err != nil {
@@ -67,7 +68,8 @@ func insertAlbums(db *sql.DB, albums []album.Album) error {
 func displayAlbums(db *sql.DB) {
 	rows, err := db.Query("SELECT id, path, name, year, explicitcover, artistid, genre, hasalbumyaml FROM album ORDER BY name")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to query albums", "error", err)
+		os.Exit(1)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -77,11 +79,13 @@ func displayAlbums(db *sql.DB) {
 		var explicitcover, hasAlbumYaml bool
 		var artistID sql.NullInt64
 		if err := rows.Scan(&id, &path, &name, &year, &explicitcover, &artistID, &genre, &hasAlbumYaml); err != nil {
-			log.Fatal(err)
+			slog.Error("Unable to scan album row", "error", err)
+			os.Exit(1)
 		}
-		log.Println("album: ", id, " ", path, " ", name, " ", year, " ", explicitcover, " artistid=", artistID, " genre=", genre, " hasalbumyaml=", hasAlbumYaml)
+		slog.Debug("Album row", "id", id, "path", path, "name", name, "year", year, "explicit_cover", explicitcover, "artist_id", artistID, "genre", genre, "has_album_yaml", hasAlbumYaml)
 	}
 	if err := rows.Err(); err != nil {
-		log.Fatal(err)
+		slog.Error("Unable to read album rows", "error", err)
+		os.Exit(1)
 	}
 }
