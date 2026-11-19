@@ -187,8 +187,8 @@ func TestScanIntoDBWithoutArtistOrAlbumYaml(t *testing.T) {
 	if !artistID.Valid || artistID.Int64 != fallbackArtistID || !albumID.Valid || albumID.Int64 != fallbackAlbumID || trackID.Valid {
 		t.Fatal("media file must link to the fallback artist and album, but not a track")
 	}
-	if !strings.Contains(logs.String(), "storing NULL ID") {
-		t.Error("missing warning for unlinked media file")
+	if !strings.Contains(logs.String(), `level=WARN msg="No track media file path matches; storing NULL track ID"`) {
+		t.Errorf("missing warning for unlinked media file; captured logs:\n%s", logs.String())
 	}
 	var albums int
 	if err := db.QueryRow("SELECT COUNT(*) FROM album").Scan(&albums); err != nil {
