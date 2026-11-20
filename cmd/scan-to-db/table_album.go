@@ -80,11 +80,10 @@ func coverImageExists(path string) bool {
 	return info.Mode().IsRegular()
 }
 
-func displayAlbums(db *sql.DB) {
+func displayAlbums(db *sql.DB) error {
 	rows, err := db.Query("SELECT id, path, name, year, explicitcover, artistid, genre, hasalbumyaml, hascover FROM album ORDER BY name")
 	if err != nil {
-		slog.Error("Unable to query albums", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("query albums: %w", err)
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -94,13 +93,12 @@ func displayAlbums(db *sql.DB) {
 		var explicitcover, hasAlbumYaml, hasCover bool
 		var artistID sql.NullInt64
 		if err := rows.Scan(&id, &path, &name, &year, &explicitcover, &artistID, &genre, &hasAlbumYaml, &hasCover); err != nil {
-			slog.Error("Unable to scan album row", "error", err)
-			os.Exit(1)
+			return fmt.Errorf("scan album row: %w", err)
 		}
 		slog.Debug("Album row", "id", id, "path", path, "name", name, "year", year, "explicit_cover", explicitcover, "artist_id", artistID, "genre", genre, "has_album_yaml", hasAlbumYaml, "has_cover", hasCover)
 	}
 	if err := rows.Err(); err != nil {
-		slog.Error("Unable to read album rows", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("read album rows: %w", err)
 	}
+	return nil
 }

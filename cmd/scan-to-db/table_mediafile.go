@@ -4,14 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"os"
 	"path/filepath"
 
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/media_file"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/track"
 )
 
-func createTableMediaFile(db *sql.DB) {
+func createTableMediaFile(db *sql.DB) error {
 	sql := `CREATE TABLE mediafile (
 		"id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
 		"path" TEXT UNIQUE,
@@ -32,44 +31,21 @@ func createTableMediaFile(db *sql.DB) {
 	  );` // SQL Statement for Create Table
 
 	slog.Info("Creating mediafile table")
-	statement, err := db.Prepare(sql)
-	if err != nil {
-		slog.Error("Unable to prepare mediafile table", "error", err)
-		os.Exit(1)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		slog.Error("Unable to create mediafile table", "error", err)
-		os.Exit(1)
+	if _, err := db.Exec(sql); err != nil {
+		return fmt.Errorf("create mediafile table: %w", err)
 	}
 
-	// In SQLite, non-unique indexes are created using the standard CREATE INDEX statement,
-	// which must be executed after the CREATE TABLE statement.
-	sql = `CREATE INDEX idx_artistpath ON mediafile (artistpath);`
-	statement, err = db.Prepare(sql)
-	if err != nil {
-		slog.Error("Unable to prepare mediafile artist index", "error", err)
-		os.Exit(1)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		slog.Error("Unable to create mediafile artist index", "error", err)
-		os.Exit(1)
-	}
-
-	sql = `CREATE INDEX idx_albumpath ON mediafile (albumpath);`
-	statement, err = db.Prepare(sql)
-	if err != nil {
-		slog.Error("Unable to prepare mediafile album index", "error", err)
-		os.Exit(1)
-	}
-	_, err = statement.Exec()
-	if err != nil {
-		slog.Error("Unable to create mediafile album index", "error", err)
-		os.Exit(1)
+	for _, statement := range []string{
+		"CREATE INDEX idx_artistpath ON mediafile (artistpath)",
+		"CREATE INDEX idx_albumpath ON mediafile (albumpath)",
+	} {
+		if _, err := db.Exec(statement); err != nil {
+			return fmt.Errorf("create mediafile index: %w", err)
+		}
 	}
 
 	slog.Info("Created mediafile table")
+	return nil
 }
 
 func insertMediaFile(db *sql.DB, path string, albumpath string, artistpath string, title string, artist string, albumartist string, album string, genre string, year int, size *int64, format *string, duration *float64, artistID, albumID, trackID sql.NullInt64) error {
@@ -140,11 +116,10 @@ func insertMediaFiles(db *sql.DB, files []media_file.MediaFileData, tracks []tra
 	return nil
 }
 
-func displayMediaFiles(db *sql.DB) {
+func displayMediaFiles(db *sql.DB) error {
 	row, err := db.Query("SELECT id, path, albumpath, artistpath, title, artist, albumartist, album, genre, year, size, format, duration, artistid, albumid, trackid FROM mediafile ORDER BY artist")
 	if err != nil {
-		slog.Error("Unable to query mediafiles", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("query mediafiles: %w", err)
 	}
 	defer row.Close()
 	for row.Next() {
@@ -164,14 +139,13 @@ func displayMediaFiles(db *sql.DB) {
 		var artistID, albumID, trackID sql.NullInt64
 		if err := row.Scan(&id, &path, &albumpath, &artistpath, &title, &artist, &albumartist, &album, &genre, &year,
 			&size, &format, &duration, &artistID, &albumID, &trackID); err != nil {
-			slog.Error("Unable to scan mediafile row", "error", err)
-			os.Exit(1)
+			return fmt.Errorf("scan mediafile row: %w", err)
 		}
 		slog.Debug("Mediafile row", "id", id, "path", path, "album_path", albumpath, "artist_path", artistpath, "title", title, "artist", artist, "album_artist", albumartist, "album", album, "genre", genre, "year", year, "size", size, "format", format, "duration", duration, "artist_id", artistID, "album_id", albumID, "track_id", trackID)
 
 	}
 	if err := row.Err(); err != nil {
-		slog.Error("Unable to read mediafile rows", "error", err)
-		os.Exit(1)
+		return fmt.Errorf("read mediafile rows: %w", err)
 	}
+	return nil
 }

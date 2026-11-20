@@ -161,9 +161,14 @@ Table creation, insertion, and display operations are grouped by table in
 [`table_trackstreaming.go`](./cmd/scan-to-db/table_trackstreaming.go), with matching per-table
 test files.
 
+`scan-to-db` builds the new SQLite database beside the destination and publishes
+it only after a successful scan. A failed rebuild leaves the previous database
+in place. To replace an existing database (including a partial database from an
+earlier run), use `--overwrite-existing`.
+
 - [`cmd/scan-to-db`](./cmd/scan-to-db) - Scans media libraries for mediafiles, moongas `artist.yml` and `album.yml` files, and track YAML files; outputs an SQLite database (`.db`) file
 ```bash
-go run cmd/scan-to-db mediascan-config.yml mediascan.db
+go run ./cmd/scan-to-db mediascan-config.yml mediascan.db
 ```
 
 ### Generate Track YAML

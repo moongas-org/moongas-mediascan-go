@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/moongas-org/moongas-mediascan-go/internal/shared/cli"
 	"github.com/moongas-org/moongas-mediascan-go/internal/shared/types/conf"
 )
 
@@ -31,6 +32,101 @@ func newTestDB(t *testing.T) *sql.DB {
 		}
 	})
 	return db
+}
+
+func TestWriteDatabasePublishesCompleteScansOnly(t *testing.T) {
+	dir := t.TempDir()
+	output := filepath.Join(dir, "mediascan.db")
+	root := t.TempDir()
+	albumPath := filepath.Join(root, "Artist", "Album")
+	if err := os.MkdirAll(albumPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTrack := func(name string) {
+		t.Helper()
+		data := `trackData:
+  title: ` + name + `
+  artist: Artist
+  albumartist: Artist
+  album: Album
+  genre: Rock
+  year: 2001
+mediaFileData:
+  - path: song.mp3
+`
+		if err := os.WriteFile(filepath.Join(albumPath, name+".yml"), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTrack("song")
+	writeTrack("duplicate")
+	cfg := conf.MediascanConf{MediaDirs: []string{root}}
+	wantFailedScan := func(mode cli.OverwriteMode) {
+		t.Helper()
+		if err := writeDatabase(output, mode, cfg); err == nil || !strings.Contains(err.Error(), "is claimed by both") {
+			t.Fatalf("want scan error for conflicting tracks, got %v", err)
+		}
+	}
+	wantFailedScan(cli.SkipExisting)
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatalf("failed first scan must not publish a file, stat error: %v", err)
+	}
+
+	if err := os.Remove(filepath.Join(albumPath, "duplicate.yml")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(albumPath, "cover.webp"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeDatabase(output, cli.SkipExisting, cfg); err != nil {
+		t.Fatal(err)
+	}
+	original, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeTrack("duplicate")
+	if err := writeDatabase(output, cli.SkipExisting, cfg); err != nil {
+		t.Fatalf("existing output must be skipped: %v", err)
+	}
+	wantFailedScan(cli.OverwriteExisting)
+	afterFailure, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(original, afterFailure) {
+		t.Fatal("failed rebuild modified the published database")
+	}
+
+	if err := os.Remove(filepath.Join(albumPath, "song.yml")); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeDatabase(output, cli.OverwriteExisting, cfg); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite3", output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var title string
+	var hasCover bool
+	if err := db.QueryRow(`SELECT t.title, b.hascover FROM track t
+		JOIN album b ON t.albumid = b.id JOIN artist a ON b.artistid = a.id`).
+		Scan(&title, &hasCover); err != nil {
+		t.Fatal(err)
+	}
+	if title != "duplicate" || !hasCover {
+		t.Fatalf("unexpected rebuilt database: title=%q hascover=%v", title, hasCover)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(output) {
+		t.Fatalf("expected only the published database, got %v", entries)
+	}
 }
 
 func TestScanIntoDBRelationshipsAndOrder(t *testing.T) {

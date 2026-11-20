@@ -10,6 +10,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -54,64 +55,87 @@ func main() {
 		os.Exit(1)
 	}
 
-	if _, err := os.Stat(outputDBFilepath); err == nil {
-		shouldOverwrite, err := cli.ShouldOverwriteFile(outputDBFilepath, "", overwriteMode)
-		if err != nil {
-			slog.Error("Unable to check whether database should be overwritten", "path", outputDBFilepath, "error", err)
-			os.Exit(1)
-		}
-		if !shouldOverwrite {
-			slog.Info("Skipping existing database", "path", outputDBFilepath)
-			return
-		}
+	if err := writeDatabase(outputDBAbsFilepath, overwriteMode, conf); err != nil {
+		slog.Error("Unable to build database", "path", outputDBAbsFilepath, "error", err)
+		os.Exit(1)
 	}
+}
 
-	os.Remove(outputDBFilepath)
-
-	slog.Info("Creating database", "path", outputDBFilepath)
-	file, err := os.Create(outputDBFilepath)
+func writeDatabase(outputPath string, overwriteMode cli.OverwriteMode, conf conf.MediascanConf) error {
+	shouldOverwrite, err := cli.ShouldOverwriteFile(outputPath, "", overwriteMode)
 	if err != nil {
-		slog.Error("Unable to create database", "path", outputDBFilepath, "error", err)
-		os.Exit(1)
+		return fmt.Errorf("check whether database should be overwritten: %w", err)
 	}
-	file.Close()
-	slog.Info("Created database", "path", outputDBFilepath)
-
-	sqliteDatabase, _ := sql.Open("sqlite3", outputDBFilepath)
-	defer sqliteDatabase.Close()
-	if err := scanIntoDB(sqliteDatabase, conf); err != nil {
-		slog.Error("Unable to scan media into database", "error", err)
-		os.Exit(1)
+	if !shouldOverwrite {
+		slog.Info("Skipping existing database", "path", outputPath)
+		return nil
 	}
 
-	// DISPLAY INSERTED RECORDS
-	displayArtists(sqliteDatabase)
-	displayAlbums(sqliteDatabase)
-	if err := displayTracks(sqliteDatabase); err != nil {
-		slog.Error("Unable to display tracks", "error", err)
-		os.Exit(1)
+	stagingDir, err := os.MkdirTemp(filepath.Dir(outputPath), ".scan-to-db-*")
+	if err != nil {
+		return fmt.Errorf("create database staging directory: %w", err)
 	}
-	if err := displayTrackStreaming(sqliteDatabase); err != nil {
-		slog.Error("Unable to display track streaming data", "error", err)
-		os.Exit(1)
+	defer func() {
+		if err := os.RemoveAll(stagingDir); err != nil {
+			slog.Warn("Unable to clean up database staging directory", "path", stagingDir, "error", err)
+		}
+	}()
+	stagedPath := filepath.Join(stagingDir, "scan.db")
+	slog.Info("Building database before publishing", "path", outputPath)
+	if err := buildDatabase(stagedPath, conf); err != nil {
+		return err
 	}
-	displayMediaFiles(sqliteDatabase)
 
-	slog.Info("Wrote database file", "path", outputDBAbsFilepath)
+	if overwriteMode == cli.SkipExisting {
+		// Do not clobber a database published by another scan while this one was running.
+		err = os.Link(stagedPath, outputPath)
+	} else {
+		err = os.Rename(stagedPath, outputPath)
+	}
+	if err != nil {
+		return fmt.Errorf("publish database: %w", err)
+	}
+	slog.Info("Wrote database file", "path", outputPath)
+	return nil
+}
+
+func buildDatabase(path string, conf conf.MediascanConf) (err error) {
+	dsn := url.URL{Scheme: "file", Path: path}
+	db, err := sql.Open("sqlite3", dsn.String())
+	if err != nil {
+		return fmt.Errorf("open staged database: %w", err)
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			if err == nil {
+				err = fmt.Errorf("close staged database: %w", closeErr)
+			} else {
+				slog.Warn("Unable to close staged database", "path", path, "error", closeErr)
+			}
+		}
+	}()
+
+	if err := scanIntoDB(db, conf); err != nil {
+		return fmt.Errorf("scan media into database: %w", err)
+	}
+	for _, display := range []func(*sql.DB) error{
+		displayArtists, displayAlbums, displayTracks, displayTrackStreaming, displayMediaFiles,
+	} {
+		if err := display(db); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func scanIntoDB(sqliteDatabase *sql.DB, conf conf.MediascanConf) error {
-	createTableArtist(sqliteDatabase)
-	if err := createTableAlbum(sqliteDatabase); err != nil {
-		return err
+	for _, createTable := range []func(*sql.DB) error{
+		createTableArtist, createTableAlbum, createTableTrack, createTableTrackStreaming, createTableMediaFile,
+	} {
+		if err := createTable(sqliteDatabase); err != nil {
+			return err
+		}
 	}
-	if err := createTableTrack(sqliteDatabase); err != nil {
-		return err
-	}
-	if err := createTableTrackStreaming(sqliteDatabase); err != nil {
-		return err
-	}
-	createTableMediaFile(sqliteDatabase)
 
 	artists := artist_scanner.ScanArtists(conf)
 	for _, a := range artists {
