@@ -20,7 +20,8 @@ func createTableAlbum(db *sql.DB) error {
 		"explicitcover" BOOLEAN,
 		"artistid" INTEGER REFERENCES artist(id),
 		"genre" TEXT,
-		"hasalbumyaml" BOOLEAN NOT NULL DEFAULT FALSE
+		"hasalbumyaml" BOOLEAN NOT NULL DEFAULT FALSE,
+		"hascover" BOOLEAN NOT NULL DEFAULT FALSE
 	  );`)
 	if err != nil {
 		return fmt.Errorf("create album table: %w", err)
@@ -54,9 +55,12 @@ func insertAlbums(db *sql.DB, albums []album.Album) error {
 			return err
 		}
 
+		hasCover := coverImageExists(filepath.Join(albumPath, "cover.jpg")) ||
+			coverImageExists(filepath.Join(albumPath, "cover.webp"))
+
 		slog.Debug("Inserting album record", "path", albumPath)
-		_, err = db.Exec(`INSERT INTO album(path, name, year, explicitcover, artistid, genre, hasalbumyaml) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			albumPath, name, albumData.DateReleased.Y, albumData.ExplicitCover, artistID, genre, a.HasAlbumYaml)
+		_, err = db.Exec(`INSERT INTO album(path, name, year, explicitcover, artistid, genre, hasalbumyaml, hascover) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			albumPath, name, albumData.DateReleased.Y, albumData.ExplicitCover, artistID, genre, a.HasAlbumYaml, hasCover)
 		if err != nil {
 			return fmt.Errorf("insert album %s: %w", albumPath, err)
 		}
@@ -65,8 +69,19 @@ func insertAlbums(db *sql.DB, albums []album.Album) error {
 	return nil
 }
 
+func coverImageExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			slog.Warn("Unable to access cover image file", "path", path, "error", err)
+		}
+		return false
+	}
+	return info.Mode().IsRegular()
+}
+
 func displayAlbums(db *sql.DB) {
-	rows, err := db.Query("SELECT id, path, name, year, explicitcover, artistid, genre, hasalbumyaml FROM album ORDER BY name")
+	rows, err := db.Query("SELECT id, path, name, year, explicitcover, artistid, genre, hasalbumyaml, hascover FROM album ORDER BY name")
 	if err != nil {
 		slog.Error("Unable to query albums", "error", err)
 		os.Exit(1)
@@ -76,13 +91,13 @@ func displayAlbums(db *sql.DB) {
 		var id int
 		var path, name, genre string
 		var year int
-		var explicitcover, hasAlbumYaml bool
+		var explicitcover, hasAlbumYaml, hasCover bool
 		var artistID sql.NullInt64
-		if err := rows.Scan(&id, &path, &name, &year, &explicitcover, &artistID, &genre, &hasAlbumYaml); err != nil {
+		if err := rows.Scan(&id, &path, &name, &year, &explicitcover, &artistID, &genre, &hasAlbumYaml, &hasCover); err != nil {
 			slog.Error("Unable to scan album row", "error", err)
 			os.Exit(1)
 		}
-		slog.Debug("Album row", "id", id, "path", path, "name", name, "year", year, "explicit_cover", explicitcover, "artist_id", artistID, "genre", genre, "has_album_yaml", hasAlbumYaml)
+		slog.Debug("Album row", "id", id, "path", path, "name", name, "year", year, "explicit_cover", explicitcover, "artist_id", artistID, "genre", genre, "has_album_yaml", hasAlbumYaml, "has_cover", hasCover)
 	}
 	if err := rows.Err(); err != nil {
 		slog.Error("Unable to read album rows", "error", err)

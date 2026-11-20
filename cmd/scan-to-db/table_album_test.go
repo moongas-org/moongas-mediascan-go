@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -73,6 +74,43 @@ func TestInsertAlbums(t *testing.T) {
 	displayAlbums(db)
 }
 
+func TestInsertAlbumsHasCover(t *testing.T) {
+	db := newAlbumTestDB(t)
+	root := t.TempDir()
+	albums := []album.Album{
+		{Path: filepath.Join(root, "JPG")},
+		{Path: filepath.Join(root, "WebP")},
+		{Path: filepath.Join(root, "InvalidExtension")},
+		{Path: filepath.Join(root, "Missing")},
+	}
+	for _, a := range albums {
+		if err := os.MkdirAll(a.Path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, cover := range []string{
+		filepath.Join(albums[0].Path, "cover.jpg"),
+		filepath.Join(albums[1].Path, "cover.webp"),
+		filepath.Join(albums[2].Path, "cover.png"),
+	} {
+		if err := os.WriteFile(cover, []byte("cover"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := insertAlbums(db, albums); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []bool{true, true, false, false} {
+		var got bool
+		if err := db.QueryRow("SELECT hascover FROM album WHERE path = ?", albums[i].Path).Scan(&got); err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("hascover for %s = %t, want %t", albums[i].Path, got, want)
+		}
+	}
+}
+
 func TestInsertAlbumsMissingArtist(t *testing.T) {
 	db := newAlbumTestDB(t)
 	if err := insertAlbums(db, []album.Album{{Path: "/missing/Album"}}); err != nil {
@@ -99,6 +137,16 @@ func TestInsertAlbumsEmptyAndErrors(t *testing.T) {
 	}
 	if err := createTableAlbum(db); err == nil {
 		t.Fatal("expected duplicate table error")
+	}
+	var hasCover bool
+	if _, err := db.Exec("INSERT INTO album(path) VALUES (?)", "/default-cover"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow("SELECT hascover FROM album WHERE path = ?", "/default-cover").Scan(&hasCover); err != nil {
+		t.Fatal(err)
+	}
+	if hasCover {
+		t.Fatal("hascover must default to false")
 	}
 	if _, err := db.Exec("DROP TABLE album"); err != nil {
 		t.Fatal(err)
