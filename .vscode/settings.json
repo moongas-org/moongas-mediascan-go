@@ -11,5 +11,34 @@
       "modernize": true
     },
     "staticcheck": true
-  }
+  },
+    "cSpell.words": [
+        "Afrobeat",
+        "Afropop",
+        "Bachata",
+        "brasileiro",
+        "Britpop",
+        "Chillwave",
+        "Cumbia",
+        "Dabke",
+        "Darkwave",
+        "Drumline",
+        "Electropop",
+        "español",
+        "Eurodance",
+        "français",
+        "française",
+        "Funktronica",
+        "Grindcore",
+        "italiano",
+        "Metalcore",
+        "Norteño",
+        "Reggaeton",
+        "Shoegaze",
+        "Sophisti",
+        "Tonk",
+        "Urbano",
+        "Volksmusik",
+        "Zamrock"
+    ]
 }

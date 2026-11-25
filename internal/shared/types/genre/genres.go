@@ -1,3 +1,4 @@
+// Package genre defines music genre types and constants.
 package genre
 
 // Genre identifies a music genre.
@@ -41,6 +42,7 @@ const (
 	Cumbia                  Genre = "Cumbia"
 	Dabke                   Genre = "Dabke"
 	DanceElectronic         Genre = "Dance/Electronic"
+	Darkwave                Genre = "Darkwave"
 	DeathMetal              Genre = "Death Metal"
 	DeepHouse               Genre = "Deep House"
 	DirtyBlues              Genre = "Dirty Blues"
@@ -52,6 +54,7 @@ const (
 	DreamPop                Genre = "Dream Pop"
 	Drumline                Genre = "Drumline"
 	EasyListening           Genre = "Easy Listening"
+	EBM                     Genre = "EBM"
 	Electronic              Genre = "Electronic"
 	Electronica             Genre = "Electronica"
 	ElectronicInstrumental  Genre = "Electronic (Instrumental)"
